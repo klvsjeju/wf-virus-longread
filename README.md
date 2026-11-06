@@ -1,4 +1,4 @@
-# wf-vzv
+# wf-vzv-longread
 
 A Nextflow DSL2 workflow for VZV reference-based analysis or de novo contig assembly from FASTQ reads.
 

@@ -1,0 +1,6 @@
+{
+  "fastq": "/mnt/d/chat/input/fastq",
+  "sample": "VZV01",
+  "reference_based_assembly": false,
+  "out_dir": "/mnt/d/chat/results/run01"
+}

@@ -1,0 +1,132 @@
+{
+  "files": {
+    "workflow-report": {
+      "filepath": "wf-vzv-report.html",
+      "title": "VZV workflow report",
+      "description": "VZV workflow report",
+      "mime-type": "text/html",
+      "optional": false,
+      "type": "aggregated"
+    },
+    "workflow-results": {
+      "filepath": "results.json",
+      "title": "Structured results and run settings",
+      "description": "Structured results and run settings",
+      "mime-type": "application/json",
+      "optional": false,
+      "type": "aggregated"
+    },
+    "basecaller": {
+      "filepath": "metadata/{{ alias }}/basecaller.json",
+      "title": "Basecalling model metadata",
+      "description": "Basecalling model metadata",
+      "mime-type": "application/json",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "qc": {
+      "filepath": "qc/{{ alias }}/NanoPlot/{{ alias }}_NanoPlot-report.html",
+      "title": "NanoPlot QC report",
+      "description": "NanoPlot QC report",
+      "mime-type": "text/html",
+      "optional": false,
+      "type": "per-sample"
+    },
+    "contigs": {
+      "filepath": "denovo/{{ alias }}/{{ alias }}.contigs.fasta",
+      "title": "De novo contigs FASTA",
+      "description": "De novo contigs FASTA",
+      "mime-type": "text/plain",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "flye-stats": {
+      "filepath": "denovo/{{ alias }}/flye/assembly_info.txt",
+      "title": "Flye assembly statistics",
+      "description": "Flye assembly statistics",
+      "mime-type": "text/plain",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "consensus": {
+      "filepath": "reference/{{ alias }}/result/clair3/{{ alias }}_consensus.fa",
+      "title": "Reference consensus FASTA",
+      "description": "Reference consensus FASTA",
+      "mime-type": "text/plain",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "mask": {
+      "filepath": "reference/{{ alias }}/result/clair3/low_coverage.bed",
+      "title": "Low coverage mask BED",
+      "description": "Low coverage mask BED",
+      "mime-type": "text/plain",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "variants": {
+      "filepath": "reference/{{ alias }}/result/clair3/norm.pass.vcf.gz",
+      "title": "PASS variants VCF",
+      "description": "PASS variants VCF",
+      "mime-type": "application/gzip",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "annotations": {
+      "filepath": "reference/{{ alias }}/result/annot/var.tsv",
+      "title": "Variant annotations TSV",
+      "description": "Variant annotations TSV",
+      "mime-type": "text/tab-separated-values",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "alignment": {
+      "filepath": "reference/{{ alias }}/result/alignment/{{ alias }}_sorted.bam",
+      "title": "Alignment BAM",
+      "description": "Alignment BAM",
+      "mime-type": "application/octet-stream",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "alignment-index": {
+      "filepath": "reference/{{ alias }}/result/alignment/{{ alias }}_sorted.bam.bai",
+      "title": "Alignment BAM index",
+      "description": "Alignment BAM index",
+      "mime-type": "application/octet-stream",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "depth": {
+      "filepath": "reference/{{ alias }}/result/alignment/{{ alias }}.depth",
+      "title": "Per-position depth",
+      "description": "Per-position depth",
+      "mime-type": "text/tab-separated-values",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "execution-report": {
+      "filepath": "execution/report.html",
+      "title": "Nextflow execution report",
+      "description": "Nextflow execution report",
+      "mime-type": "text/html",
+      "optional": true,
+      "type": "aggregated"
+    },
+    "timeline": {
+      "filepath": "execution/timeline.html",
+      "title": "Nextflow timeline",
+      "description": "Nextflow timeline",
+      "mime-type": "text/html",
+      "optional": true,
+      "type": "aggregated"
+    },
+    "trace": {
+      "filepath": "execution/trace.tsv",
+      "title": "Nextflow task trace",
+      "description": "Nextflow task trace",
+      "mime-type": "text/tab-separated-values",
+      "optional": true,
+      "type": "aggregated"
+    }
+  }
+}

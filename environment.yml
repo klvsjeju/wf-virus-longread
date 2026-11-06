@@ -1,0 +1,17 @@
+name: vzv
+channels:
+ - conda-forge
+ - bioconda
+dependencies:
+ - python=3.10
+ - minimap2=2.28
+ - samtools=1.21
+ - bcftools=1.21
+ - nanoplot=1.43.0
+ - deeptools=3.5.6
+ - clair3>=1.0.10
+ - flye=2.9.5
+ - snpeff=5.2
+ - snpsift=5.2
+ - openjdk=17
+ - procps-ng

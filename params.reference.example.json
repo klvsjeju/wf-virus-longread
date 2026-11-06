@@ -1,0 +1,11 @@
+{
+  "fastq": "/mnt/d/chat/input/fastq",
+  "sample": "VZV01",
+  "reference_based_assembly": true,
+  "reference": "/mnt/d/chat/input/reference.fa",
+  "model_dir": "/mnt/d/chat/input/clair3_model",
+  "snpeff_config": "/mnt/d/chat/input/snpEff.config",
+  "snpeff_data": "/mnt/d/chat/input/data",
+  "snpeff_db": "VZV_CUSTOM",
+  "out_dir": "/mnt/d/chat/results/run01"
+}

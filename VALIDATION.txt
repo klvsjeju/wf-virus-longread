@@ -1,0 +1,33 @@
+Validation for the four input/assembly requirements (2026-11-06)
+
+Passed in this environment:
+- python3 -m unittest discover -s tests -v: 2 tests covering late FASTQ model tags, plain/gzip merging, mixed models, manual override, missing tags and malformed FASTQ.
+- Python AST parse of bin/inputs.py.
+- bash -n bin/reference.sh.
+- JSON parsing, internal schema references, example parameter names and reference-mode required fields.
+- FASTQ path/reference file-path picker declarations.
+- Static de novo branch check: Flye contigs output, no downstream Medaka/Clair3/bcftools consensus stage.
+
+Not run:
+- Formal Draft7 validation: Python jsonschema module is unavailable.
+- Nextflow compilation/execution: nextflow executable is unavailable.
+- Docker build and actual VZV analysis: docker executable is unavailable.
+- EPI2ME Desktop UI file selection and end-to-end run.
+
+Reference reviewed:
+https://github.com/epi2me-labs/wf-bacterial-genomes/blob/master/nextflow_schema.json
+The upstream master schema was reviewed on 2026-11-06; it is not a pinned dependency.
+
+Manual tool options update:
+- Added flye_opts, mask_depth_opts (samtools depth), consensus_opts (bcftools consensus).
+- 5 total Python tests passed, including quoted argument preservation, blank options, managed-option conflicts, and command construction with mocked subprocess.
+- bash -n, Python AST and JSON/schema/config/process wiring checks passed.
+- Actual Flye/samtools/bcftools and Nextflow/EPI2ME execution remain untested.
+
+EPI2ME output/report integration update:
+- Added output_definition.json following upstream file descriptions.
+- Added per-sample summaries and aggregate wf-vzv-report.html/results.json processes, waiting for analysis, metadata and QC.
+- 7 total Python tests passed: includes de novo FASTA statistics, structured results, HTML escaping, reference outputs and optional mask.
+- Output definition structure, Python syntax and reference.sh syntax passed.
+- NanoPlot report links include the configured sample prefix.
+- Desktop Details/Reports/Files/Logs rendering, report discovery and Nextflow compilation/execution remain untested. Tabs are managed by Desktop, not created by output_definition.json.

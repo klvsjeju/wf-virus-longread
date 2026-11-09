@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "wf-vzv",
-  "workflow_title": "VZV analysis",
+  "title": "klvsjeju/wf-virus-longread",
+  "workflow_title": "wf-virus-longread",
   "type": "object",
   "definitions": {
     "input": {
@@ -11,45 +11,52 @@
         "fastq": {
           "type": "string",
           "title": "FASTQ file or folder",
-          "description": "Single FASTQ; flat directory = one sample; one-level sample/barcode subdirectories = separate samples.",
+          "description": "FASTQ files to use in the analysis.",
           "format": "path",
           "help_text": "Choose one .fastq/.fq file (optionally gzip compressed), a folder of FASTQ files for one sample, or a folder of barcode/sample subfolders. Use sample_sheet to assign aliases to subfolders."
         },
         "reference_based_assembly": {
           "type": "boolean",
           "title": "Reference-based assembly",
-          "description": "Disabled: Flye contigs only. Enabled: reference alignment, Clair3, consensus and snpEff.",
+          "description": "Enable reference based assembly istead of de novo assembly.",
           "default": false
         },
         "reference": {
           "type": "string",
           "title": "Reference FASTA",
-          "description": "Select a local uncompressed FASTA. Required only for reference-based assembly.",
+          "description": "reference sequence FASTA file.",
           "format": "file-path",
           "help_text": "Upload/select your own uncompressed reference FASTA file. Used only when reference_based_assembly is enabled; no bundled reference is selected automatically."
-        },
-        "sample": {
-          "type": "string",
-          "title": "Sample name",
-          "description": "Name for a single file or flat FASTQ directory.",
-          "default": "sample"
-        },
-        "sample_sheet": {
-          "type": "string",
-          "title": "Sample sheet CSV",
-          "description": "barcode,alias columns; one-level sample folders only; must match all selected folders.",
-          "format": "file-path"
         },
         "analyse_unclassified": {
           "type": "boolean",
           "title": "Include unclassified folder",
-          "description": "",
+          "description": "Analyse unclassifed reads from input directory. By default the workflow will not process reads in the un classified directory.",
           "default": false
         }
       }
     },
-    "model": {
-      "title": "Basecalling and Clair3",
+    "samples": {
+      "title": "Sample options",
+      "type": "object",
+      "properties": {
+        "sample_sheet": {
+          "type": "string",
+          "title": "Sample sheet CSV",
+          "description": "A CSV file used to map barcodes to sample aliases. The sample sheet can be provided when the input data is a directory containing sub-directories with FASTQ files.",
+          "format": "file-path",
+          "help_text": "The sample sheet is a CSV file with, minimally, columns named `barcode` and `alias`. Extra columns are allowed. A `type` column is required for certain workflows and should have the following values; `test_sample`, `positive_control`, `negative_control`, `no_template_control`."
+        },
+        "sample": {
+          "type": "string",
+          "title": "Sample name",
+          "description": "A single sample name for non-multiplexed data. Permissible if passing a single .fastq(.gz) file or directory of .fastq(.gz) files.",
+          "default": "sample"
+        }
+      }
+    },
+    "advanced": {
+      "title": "Advanced option",
       "type": "object",
       "properties": {
         "override_basecaller_cfg": {
@@ -89,78 +96,19 @@
             "dna_r9.4.1_e8.1_hac",
             "dna_r9.4.1_e8.1_hac_prom"
           ],
-          "help_text": "Leave unset for automatic detection from FASTQ header model tags. Select a model manually when tags are missing or to override detection. This describes the model used to basecall existing reads; it does not run basecalling. Clair3 checkpoints must be supplied separately for reference mode."
+          "help_text": "Leave unset to infer from FASTQ headers. A manual choice overrides detection. Reference mode automatically prepares an exact-match Clair3 1.x checkpoint for supported models; see README.md for the supported list. This does not run basecalling."
         },
-        "model_dir": {
-          "type": "string",
-          "title": "Clair3 checkpoint directory",
-          "description": "Reference mode only. Direct checkpoint folder, or library root used with model_map.",
-          "format": "directory-path"
-        },
-        "model_map": {
-          "type": "string",
-          "title": "Verified basecaller-to-Clair3 mapping TSV",
-          "description": "Reference mode library selection only. Columns basecaller_cfg,relative_path. No automatic download.",
-          "format": "file-path"
-        }
-      }
-    },
-    "annotation": {
-      "title": "Reference annotation",
-      "type": "object",
-      "properties": {
-        "snpeff_config": {
-          "type": "string",
-          "title": "snpEff.config",
-          "description": "",
-          "format": "file-path"
-        },
-        "snpeff_data": {
-          "type": "string",
-          "title": "snpEff data folder",
-          "description": "",
-          "format": "directory-path"
-        },
-        "snpeff_db": {
-          "type": "string",
-          "title": "snpEff DB ID",
-          "description": "Reference mode: database must match reference coordinates and contig names."
-        }
-      }
-    },
-    "advanced": {
-      "title": "Advanced options",
-      "type": "object",
-      "properties": {
         "flye_genome_size": {
           "type": "integer",
           "title": "Estimated genome size (bp)",
-          "description": "",
-          "default": 125000,
-          "minimum": 1
+          "description": "Estimated genome size for de novo assembly in non-SI prefix format (e.g 5000000 for 5 Mb genome)"
         },
-        "flye_read_type": {
+        "flye_opts": {
           "type": "string",
-          "title": "Flye read type",
-          "description": "Use nano-raw for older/noisier ONT reads; nano-hq for high-quality reads.",
-          "default": "nano-hq",
-          "enum": [
-            "nano-hq",
-            "nano-raw"
-          ]
-        },
-        "threads": {
-          "type": "integer",
-          "title": "CPUs per task",
-          "description": "",
-          "default": 4,
-          "minimum": 1
-        },
-        "memory": {
-          "type": "string",
-          "title": "Memory per task",
-          "description": "",
-          "default": "12 GB"
+          "title": "Additional Flye options",
+          "description": "Extra Flye arguments, e.g. --meta --iterations 2 --asm-coverage 50. Input, output, threads and genome size are managed by the workflow.",
+          "default": "",
+          "help_text": "Enter command-line arguments only. Quoted values are supported. Shell expansion, pipes and redirects are not executed."
         },
         "min_mapq": {
           "type": "integer",
@@ -183,19 +131,6 @@
           "default": 0,
           "minimum": 0
         },
-        "container": {
-          "type": "string",
-          "title": "Docker image",
-          "description": "",
-          "default": "wf-vzv:0.2.0"
-        },
-        "flye_opts": {
-          "type": "string",
-          "title": "Additional Flye options",
-          "description": "Extra Flye arguments, e.g. --meta --iterations 2 --asm-coverage 50. Input, output, threads and genome size are managed by the workflow.",
-          "default": "",
-          "help_text": "Enter command-line arguments only. Quoted values are supported. Shell expansion, pipes and redirects are not executed."
-        },
         "mask_depth_opts": {
           "type": "string",
           "title": "Additional mask depth options",
@@ -206,22 +141,60 @@
         "consensus_opts": {
           "type": "string",
           "title": "Additional consensus options",
-          "description": "Extra bcftools consensus arguments, e.g. --mask-with N --mark-del -. Reference, sample, mask, chain and output paths are managed by the workflow. Applies only to reference mode.",
+          "description": "Extra bcftools consensus arguments. Example: --include 'FORMAT/AF>0.5'.",
           "default": "",
-          "help_text": "Enter command-line arguments only. Quoted values are supported. Shell expansion, pipes and redirects are not executed."
+          "help_text": "Enter command-line arguments only. To apply variants with allele frequency strictly greater than 50%, use --include 'FORMAT/AF>0.5'. AF is a fraction from 0 to 1, not a percentage. This example requires a numeric FORMAT/AF field in the input VCF. Quoted values are supported; shell expansion is not executed."
         }
       }
     },
-    "output": {
-      "title": "Output options",
+    "annotation": {
+      "title": "Reference annotation",
       "type": "object",
       "properties": {
+        "run_annotation": {
+          "type": "boolean",
+          "title": "Run reference annotation",
+          "description": "Optional snpEff annotation of variants. Disabled: provide unannotated VCF without requiring snpEff resources.",
+          "default": false
+        },
+        "snpeff_config": {
+          "type": "string",
+          "title": "snpEff.config",
+          "description": "Select the snpEff.config file supplied with your reference-specific annotation database. Example: D:\\Annotation\\vzv_poka\\snpEff.config.",
+          "format": "file-path",
+          "help_text": "Choose the configuration file, not genes.gff, genes.gbk or snpEffectPredictor.bin. It must define the database ID entered below. For the Dumas package, select D:\\Annotation\\vzv_dumus\\snpEff.config."
+        },
+        "snpeff_data": {
+          "type": "string",
+          "title": "snpEff data folder",
+          "description": "Select the data folder containing the database subfolder. Example: D:\\Annotation\\vzv_poka\\data.",
+          "format": "directory-path",
+          "help_text": "Choose the parent data folder, not data\\VZV_pOka and not an individual file. The selected folder must contain <DB ID>\\snpEffectPredictor.bin. For Dumas, select D:\\Annotation\\vzv_dumus\\data."
+        },
+        "snpeff_db": {
+          "type": "string",
+          "title": "snpEff DB ID",
+          "description": "Enter the database subfolder name as text; do not select a file. Example: VZV_pOka for pOka, or VZV_Dumas for the existing Dumas package.",
+          "help_text": "The ID must match both the subfolder inside the selected data folder and the genome entry in snpEff.config. Example: data\\VZV_pOka\\snpEffectPredictor.bin means DB ID VZV_pOka. Match spelling and case exactly. Use the database matching the reference FASTA used for alignment."
+        }
+      }
+    },
+    "misc": {
+      "title": "Miscellaneous option",
+      "type": "object",
+      "properties": {
+        "threads": {
+          "type": "integer",
+          "title": "CPUs per task",
+          "description": "",
+          "default": 4,
+          "minimum": 1
+        },
         "out_dir": {
           "type": "string",
           "title": "Output directory",
-          "description": "Directory for workflow results. Select a destination folder in EPI2ME.",
-          "format": "directory-path",
-          "default": "output"
+          "description": "Optional. Leave unset to save in analysis_result inside the selected FASTQ folder, or beside a selected FASTQ file.",
+          "format": "directory-path"
         }
       }
     }
@@ -231,16 +204,16 @@
       "$ref": "#/definitions/input"
     },
     {
-      "$ref": "#/definitions/model"
-    },
-    {
-      "$ref": "#/definitions/annotation"
+      "$ref": "#/definitions/samples"
     },
     {
       "$ref": "#/definitions/advanced"
     },
     {
-      "$ref": "#/definitions/output"
+      "$ref": "#/definitions/annotation"
+    },
+    {
+      "$ref": "#/definitions/misc"
     },
     {
       "if": {
@@ -255,8 +228,27 @@
       },
       "then": {
         "required": [
-          "reference",
-          "model_dir",
+          "reference"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reference_based_assembly": {
+            "const": true
+          },
+          "run_annotation": {
+            "const": true
+          }
+        },
+        "required": [
+          "reference_based_assembly",
+          "run_annotation"
+        ]
+      },
+      "then": {
+        "required": [
           "snpeff_config",
           "snpeff_data",
           "snpeff_db"
@@ -267,5 +259,5 @@
   "required": [
     "fastq"
   ],
-  "description": "VZV reference analysis or de novo Flye contigs."
+  "description": " Human herpes virus: reference based analysis or de novo Flye contigs."
 }

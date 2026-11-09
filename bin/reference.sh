@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-mkdir -p result/alignment result/clair3 result/annot
+mkdir -p result/alignment result/clair3
 bam="result/alignment/${SAMPLE}_sorted.bam"
 model_path="$(cat selected_model.txt)"
 minimap2 -ax map-ont --secondary=no -t "$THREADS" "$MMI" "$READS" |
@@ -29,7 +29,10 @@ if (( MASK_DEPTH > 0 )); then
 fi
 python3 "$OPTIONS_RUNNER" consensus "$CONSENSUS_OPTS_B64" -- bcftools consensus -f "$REF" -s "$SAMPLE" "${mask[@]}" result/clair3/norm.pass.vcf.gz |
  awk -v s="$SAMPLE" '/^>/ {n++;print ">" s "|contig" n;next} {print}' > "result/clair3/${SAMPLE}_consensus.fa"
+if [[ "${RUN_ANNOTATION:-false}" == true ]]; then
+ mkdir -p result/annot
 snpEff ann -c snpEff.config -dataDir "$PWD/snpeff_data" -ud 0 -no-intergenic "$SNPEFF_DB" result/clair3/norm.vcf.gz > result/annot/annot.vcf
 SnpSift extractFields -s ';' -e '.' result/annot/annot.vcf POS REF ALT \
  'ANN[*].GENE' 'ANN[*].IMPACT' 'ANN[*].EFFECT' 'GEN[0].GT' 'GEN[0].DP' 'GEN[0].AF' 'ANN[*].HGVS_C' 'ANN[*].HGVS_P' |
  awk -v s="$SAMPLE" 'BEGIN {OFS="\t"} NR==1 {sub(/^#/,"",$0);print "Sample",$0;next} {print s,$0}' > result/annot/var.tsv
+fi

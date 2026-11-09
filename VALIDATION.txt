@@ -31,3 +31,27 @@ EPI2ME output/report integration update:
 - Output definition structure, Python syntax and reference.sh syntax passed.
 - NanoPlot report links include the configured sample prefix.
 - Desktop Details/Reports/Files/Logs rendering, report discovery and Nextflow compilation/execution remain untested. Tabs are managed by Desktop, not created by output_definition.json.
+
+Automatic Clair3 model update (2026-11-09, workflow 0.3.0):
+- Pinned Clair3 to 1.2.0 (TensorFlow checkpoint format); no unbounded upgrade to incompatible 2.x.
+- Verified 16 model URL stubs against Rerio revision 198f90f33434437001ad0d023e3ca912cdbca47c.
+- Official SUP v5.2 model archive HTTP HEAD returned 200. Full archive download was interrupted before completion; real model extraction/inference was not verified.
+- Added automatic preparation shared by distinct basecaller keys, bundled model detection, HTTPS download, checkpoint validation and model provenance.
+- Removed model_dir/model_map properties from EPI2ME input schema and conditional model_dir requirement. Custom CLI overrides remain available.
+- 13 Python tests passed, including synthetic checkpoint download/extraction, bundled/custom selection, unsupported models, archive traversal/link rejection and UI schema removal.
+- Bash syntax and git diff --check passed.
+- Actual Nextflow compilation/execution, Docker/Conda solve/build, full real model download and VZV inference have not been performed for this update.
+- Existing Word guides document 0.2.0; README.md describes the new behavior.
+
+EPI2ME input group reorganization (2026-11-09):
+- Schema groups ordered as Input options, Sample options, Advanced option, Reference annotation, Miscellaneous option.
+- Sample options contains sample_sheet then sample.
+- All parameter property definitions and conditional reference requirements preserved; no duplicate parameters.
+- EPI2ME's built-in Nextflow configuration area is not duplicated by a schema group.
+- Desktop rendering has not been checked for this change.
+
+Fixed Flye read type (2026-11-09):
+- Removed flye_read_type from the schema and config; de novo command now always uses --nano-hq.
+- Reports record the fixed nano-hq value; additional read-type arguments remain blocked by the options helper.
+- Static command/schema/config checks, 13 Python tests, Bash syntax and git diff --check passed.
+- Actual Nextflow/Flye execution and EPI2ME form rendering remain untested for this change.

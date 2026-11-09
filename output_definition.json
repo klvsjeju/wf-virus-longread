@@ -1,7 +1,7 @@
 {
   "files": {
     "workflow-report": {
-      "filepath": "wf-vzv-report.html",
+      "filepath": "wf-virus-longread-report.html",
       "title": "VZV workflow report",
       "description": "VZV workflow report",
       "mime-type": "text/html",
@@ -127,6 +127,14 @@
       "mime-type": "text/tab-separated-values",
       "optional": true,
       "type": "aggregated"
+    },
+    "clair3-model-selection": {
+      "filepath": "reference/{{ alias }}/result/model_selection.json",
+      "title": "Clair3 model provenance",
+      "description": "Selected checkpoint, source and file hashes.",
+      "mime-type": "application/json",
+      "optional": true,
+      "type": "per-sample"
     }
   }
 }

@@ -18,7 +18,7 @@ class ReportTests(unittest.TestCase):
             self.assertEqual(row['assembly'], {'sequences':2,'total_bases':6,'longest':4})
             self.assertNotIn('Consensus FASTA',row['files'])
             report.aggregate([row],{'flye_opts':'--meta <test>'},p)
-            text=(p/'wf-vzv-report.html').read_text()
+            text=(p/'wf-virus-longread-report.html').read_text()
             self.assertIn('model&lt;a&gt;',text)
             self.assertIn('--meta &lt;test&gt;',text)
             self.assertEqual(json.loads((p/'results.json').read_text())['samples'][0]['sample'],'sample1')

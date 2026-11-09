@@ -9,7 +9,7 @@ dependencies:
  - bcftools=1.21
  - nanoplot=1.43.0
  - deeptools=3.5.6
- - clair3>=1.0.10
+ - clair3=1.2.0
  - flye=2.9.5
  - snpeff=5.2
  - snpsift=5.2

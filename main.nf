@@ -39,27 +39,43 @@ process INDEX_REFERENCE {
  """
 }
 
+process PREPARE_CLAIR3_MODEL {
+ tag basecaller
+ input:
+ val basecaller
+ path custom_root, stageAs: 'custom_source'
+ path mapping, stageAs: 'mapping.tsv'
+ path catalog, stageAs: 'catalog.json'
+ output:
+ tuple val(basecaller), path('clair3_model'), path('model_selection.json')
+ script:
+ def custom = params.model_dir ? "--custom-root '${custom_root}'" : ''
+ """
+ python3 '${projectDir}/bin/clair3_models.py' --basecaller '${basecaller}' --catalog '${catalog}' --mapping '${mapping}' ${custom}
+ """
+}
+
 process REFERENCE_ANALYSIS {
  tag sample
  publishDir "${params.out_dir}/reference/${sample}", mode: 'copy', pattern: 'result'
  input:
- tuple val(sample), path(reads), path(metadata)
+ tuple val(sample), path(reads), path(metadata), path(model_root, stageAs: 'models'), path(model_provenance)
  tuple path(ref), path(fai), path(mmi)
- path model_root, stageAs: 'models'
- path model_map, stageAs: 'mapping.tsv'
  path config, stageAs: 'snpEff.config'
  path data, stageAs: 'snpeff_data'
  output:
  tuple val(sample), path('result')
  script:
  """
- python3 '${projectDir}/bin/inputs.py' model --root models --mapping mapping.tsv --metadata '${metadata}' > selected_model.txt
+ realpath '${model_root}' > selected_model.txt
+ mkdir -p result
+ cp '${model_provenance}' result/model_selection.json
  export SAMPLE='${sample}' READS='${reads}' REF='${ref}' MMI='${mmi}'
  export THREADS=${task.cpus} MAPQ=${params.min_mapq} MIN_COVERAGE=${params.min_coverage} MASK_DEPTH=${params.mask_depth}
  export OPTIONS_RUNNER='${projectDir}/bin/run_options.py'
  export MASK_DEPTH_OPTS_B64='${(params.mask_depth_opts ?: '').toString().bytes.encodeBase64().toString()}'
  export CONSENSUS_OPTS_B64='${(params.consensus_opts ?: '').toString().bytes.encodeBase64().toString()}'
- export SNPEFF_DB='${params.snpeff_db}'
+ export RUN_ANNOTATION='${params.run_annotation}' SNPEFF_DB='${params.run_annotation ? params.snpeff_db : ''}'
  bash '${projectDir}/bin/reference.sh'
  """
 }
@@ -73,7 +89,7 @@ process DE_NOVO_CONTIGS {
  tuple val(sample), path("${sample}.contigs.fasta"), path('flye')
  script:
  """
- python3 '${projectDir}/bin/run_options.py' flye '${(params.flye_opts ?: '').toString().bytes.encodeBase64().toString()}' -- flye --${params.flye_read_type} '${reads}' --genome-size ${params.flye_genome_size} --threads ${task.cpus} --out-dir flye
+ python3 '${projectDir}/bin/run_options.py' flye '${(params.flye_opts ?: '').toString().bytes.encodeBase64().toString()}' -- flye --nano-hq '${reads}' --genome-size ${params.flye_genome_size} --threads ${task.cpus} --out-dir flye
  test -s flye/assembly.fasta
  cp flye/assembly.fasta '${sample}.contigs.fasta'
  """
@@ -97,16 +113,17 @@ process WORKFLOW_REPORT {
  input:
  path summaries, stageAs: 'samples??/*'
  output:
- path 'wf-vzv-report.html'
+ path 'wf-virus-longread-report.html'
  path 'results.json'
  script:
  def settings = [workflow_version: workflow.manifest.version,
    run_name: workflow.runName, session_id: workflow.sessionId.toString(),
    reference_based_assembly: params.reference_based_assembly, reference: params.reference,
+   run_annotation: params.run_annotation,
    min_mapq: params.min_mapq, min_coverage: params.min_coverage,
    mask_depth: params.mask_depth, mask_depth_opts: params.mask_depth_opts,
    consensus_opts: params.consensus_opts, flye_opts: params.flye_opts,
-   flye_read_type: params.flye_read_type, flye_genome_size: params.flye_genome_size,
+   flye_read_type: 'nano-hq', flye_genome_size: params.flye_genome_size,
    override_basecaller_cfg: params.override_basecaller_cfg,
    container: params.container, threads: params.threads]
  def encoded = groovy.json.JsonOutput.toJson(settings).bytes.encodeBase64().toString()
@@ -118,11 +135,11 @@ process WORKFLOW_REPORT {
 workflow {
  if (params.help) { log.info 'See README.md. Required: --fastq. Default mode: de novo contigs only.'; return }
  if (!params.fastq) error 'Select --fastq (FASTQ file or directory)'
+ if (!params.out_dir) error 'Unable to resolve output directory; specify --out_dir'
  ['threads','flye_genome_size','min_mapq','min_coverage','mask_depth'].each { k ->
    if (!(params[k].toString() ==~ /[0-9]+/)) error "--${k} must be an integer"
  }
  if ((params.threads as int) < 1 || (params.flye_genome_size as int) < 1) error 'threads and genome size must be positive'
- if (!(params.flye_read_type in ['nano-hq','nano-raw'])) error 'Invalid flye_read_type'
  if (params.override_basecaller_cfg && !(params.override_basecaller_cfg ==~ /[A-Za-z0-9_.@+-]+/)) error 'Invalid basecaller name'
  def root = file(params.fastq, checkIfExists: true)
  def isFq = { p -> p.isFile() && (p.name ==~ /.*\.(fastq|fq)(\.gz)?/) }
@@ -130,7 +147,7 @@ workflow {
  if (isFq(root)) samples << [params.sample, [root]]
  else if (root.isDirectory()) {
    def direct = root.listFiles().findAll { isFq(it) }.sort { it.name }
-   def dirs = root.listFiles().findAll { it.isDirectory() }.sort { it.name }.collect { dir ->
+   def dirs = root.listFiles().findAll { it.isDirectory() && it.toPath().toAbsolutePath().normalize() != java.nio.file.Paths.get(params.out_dir.toString()).toAbsolutePath().normalize() }.sort { it.name }.collect { dir ->
      [dir.name, dir.listFiles().findAll { isFq(it) }.sort { it.name }]
    }.findAll { it[1] && (params.analyse_unclassified || it[0] != 'unclassified') }
    if (direct && dirs) error 'Do not mix top-level FASTQ and sample folders'
@@ -165,18 +182,33 @@ workflow {
  QC(INGEST.out)
  def analysis_results
  if (params.reference_based_assembly) {
-   ['reference','model_dir','snpeff_config','snpeff_data','snpeff_db'].each { k -> if (!params[k]) error "Reference mode requires --${k}" }
-   if (!(params.snpeff_db ==~ /[A-Za-z0-9_.-]+/)) error 'Invalid snpEff database ID'
+   ['reference'].each { k -> if (!params[k]) error "Reference mode requires --${k}" }
+   if (params.run_annotation) {
+     ['snpeff_config','snpeff_data','snpeff_db'].each { k -> if (!params[k]) error "Annotation requires --${k}" }
+     if (!(params.snpeff_db ==~ /[A-Za-z0-9_.-]+/)) error 'Invalid snpEff database ID'
+   }
    def ref = file(params.reference, checkIfExists: true)
-   def models = file(params.model_dir, checkIfExists: true)
-   def config = file(params.snpeff_config, checkIfExists: true)
-   def data = file(params.snpeff_data, checkIfExists: true)
+   if (params.model_map && !params.model_dir) error '--model_map requires --model_dir; leave both unset for automatic models'
+   def models = file(params.model_dir ?: "${projectDir}/model_map.tsv", checkIfExists: true)
+   def config = file(params.run_annotation ? params.snpeff_config : "${projectDir}/model_map.tsv", checkIfExists: true)
+   def data = file(params.run_annotation ? params.snpeff_data : "${projectDir}/model_map.tsv", checkIfExists: true)
    def mapping = file(params.model_map ?: "${projectDir}/model_map.tsv", checkIfExists: true)
    if (!ref.isFile()) error 'reference must be a FASTA file'
-   if (!models.isDirectory() || !data.isDirectory()) error 'model_dir and snpeff_data must be directories'
-   if (!file("${data}/${params.snpeff_db}/snpEffectPredictor.bin").exists()) error 'snpEff DB binary not found'
+   if (params.model_dir && !models.isDirectory()) error 'model_dir must be a directory'
+   if (params.run_annotation && !data.isDirectory()) error 'snpeff_data must be a directory'
+   if (params.run_annotation && !file("${data}/${params.snpeff_db}/snpEffectPredictor.bin").exists()) error 'snpEff DB binary not found'
    INDEX_REFERENCE(ref)
-   REFERENCE_ANALYSIS(INGEST.out, INDEX_REFERENCE.out, models, mapping, config, data)
+   def keyed_reads = INGEST.out.map { sample, reads, metadata ->
+     def basecaller = new groovy.json.JsonSlurper().parseText(metadata.text).selected ?: 'unknown'
+     if (!(basecaller ==~ /[A-Za-z0-9_.@+-]+/)) error 'Invalid basecaller name in FASTQ metadata'
+     tuple(basecaller, sample, reads, metadata)
+   }
+   PREPARE_CLAIR3_MODEL(keyed_reads.map { key, sample, reads, metadata -> key }.unique(), models, mapping,
+     file("${projectDir}/clair3_model_catalog.json", checkIfExists: true))
+   def model_reads = keyed_reads.combine(PREPARE_CLAIR3_MODEL.out, by: 0).map { key, sample, reads, metadata, checkpoint, provenance ->
+     tuple(sample, reads, metadata, checkpoint, provenance)
+   }
+   REFERENCE_ANALYSIS(model_reads, INDEX_REFERENCE.out, config, data)
    analysis_results = REFERENCE_ANALYSIS.out
  } else {
    DE_NOVO_CONTIGS(INGEST.out)

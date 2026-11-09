@@ -1,21 +1,22 @@
 nextflow.enable.dsl = 2
 
 process INGEST {
- tag sample
- publishDir "${params.out_dir}/metadata/${sample}", mode: 'copy', pattern: 'basecaller.json'
+ tag { sample }
+ publishDir { "${params.out_dir}/metadata/${sample}" }, mode: 'copy', pattern: 'basecaller.json'
  input:
- tuple val(sample), path(reads, stageAs: 'chunks??/*', arity: '1..*')
+ tuple val(sample), path(reads, stageAs: 'chunks??/*')
  output:
  tuple val(sample), path('reads.fastq.gz'), path('basecaller.json')
  script:
+ def read_files = reads instanceof List ? reads : [reads]
  """
- python3 '${projectDir}/bin/inputs.py' merge --output reads.fastq.gz --metadata basecaller.json --override '${params.override_basecaller_cfg ?: ''}' ${reads.collect { "'${it}'" }.join(' ')}
+ python3 '${projectDir}/bin/inputs.py' merge --output reads.fastq.gz --metadata basecaller.json --override '${params.override_basecaller_cfg ?: ''}' ${read_files.collect { "'${it}'" }.join(' ')}
  """
 }
 
 process QC {
- tag sample
- publishDir "${params.out_dir}/qc/${sample}", mode: 'copy'
+ tag { sample }
+ publishDir { "${params.out_dir}/qc/${sample}" }, mode: 'copy'
  input:
  tuple val(sample), path(reads), path(metadata)
  output:
@@ -40,7 +41,7 @@ process INDEX_REFERENCE {
 }
 
 process PREPARE_CLAIR3_MODEL {
- tag basecaller
+ tag { basecaller }
  input:
  val basecaller
  path custom_root, stageAs: 'custom_source'
@@ -56,8 +57,8 @@ process PREPARE_CLAIR3_MODEL {
 }
 
 process REFERENCE_ANALYSIS {
- tag sample
- publishDir "${params.out_dir}/reference/${sample}", mode: 'copy', pattern: 'result'
+ tag { sample }
+ publishDir { "${params.out_dir}/reference/${sample}" }, mode: 'copy', pattern: 'result'
  input:
  tuple val(sample), path(reads), path(metadata), path(model_root, stageAs: 'models'), path(model_provenance)
  tuple path(ref), path(fai), path(mmi)
@@ -81,8 +82,8 @@ process REFERENCE_ANALYSIS {
 }
 
 process DE_NOVO_CONTIGS {
- tag sample
- publishDir "${params.out_dir}/denovo/${sample}", mode: 'copy'
+ tag { sample }
+ publishDir { "${params.out_dir}/denovo/${sample}" }, mode: 'copy'
  input:
  tuple val(sample), path(reads), path(metadata)
  output:
@@ -96,7 +97,7 @@ process DE_NOVO_CONTIGS {
 }
 
 process SAMPLE_SUMMARY {
- tag sample
+ tag { sample }
  input:
  tuple val(sample), path(metadata), path(qc), path(analysis)
  output:
@@ -126,9 +127,10 @@ process WORKFLOW_REPORT {
    flye_read_type: 'nano-hq', flye_genome_size: params.flye_genome_size,
    override_basecaller_cfg: params.override_basecaller_cfg,
    container: params.container, threads: params.threads]
+ def summary_files = summaries instanceof List ? summaries : [summaries]
  def encoded = groovy.json.JsonOutput.toJson(settings).bytes.encodeBase64().toString()
  """
- python3 '${projectDir}/bin/report.py' aggregate '${encoded}' ${summaries.collect { "'${it}'" }.join(' ')}
+ python3 '${projectDir}/bin/report.py' aggregate '${encoded}' ${summary_files.collect { "'${it}'" }.join(' ')}
  """
 }
 
@@ -147,7 +149,7 @@ workflow {
  if (isFq(root)) samples << [params.sample, [root]]
  else if (root.isDirectory()) {
    def direct = root.listFiles().findAll { isFq(it) }.sort { it.name }
-   def dirs = root.listFiles().findAll { it.isDirectory() && it.toPath().toAbsolutePath().normalize() != java.nio.file.Paths.get(params.out_dir.toString()).toAbsolutePath().normalize() }.sort { it.name }.collect { dir ->
+   def dirs = root.listFiles().findAll { it.isDirectory() && it.toAbsolutePath().normalize() != java.nio.file.Paths.get(params.out_dir.toString()).toAbsolutePath().normalize() }.sort { it.name }.collect { dir ->
      [dir.name, dir.listFiles().findAll { isFq(it) }.sort { it.name }]
    }.findAll { it[1] && (params.analyse_unclassified || it[0] != 'unclassified') }
    if (direct && dirs) error 'Do not mix top-level FASTQ and sample folders'

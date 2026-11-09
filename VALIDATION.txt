@@ -55,3 +55,14 @@ Fixed Flye read type (2026-11-09):
 - Reports record the fixed nano-hq value; additional read-type arguments remain blocked by the options helper.
 - Static command/schema/config checks, 13 Python tests, Bash syntax and git diff --check passed.
 - Actual Nextflow/Flye execution and EPI2ME form rendering remain untested for this change.
+
+Nextflow compatibility fix (2026-11-09, workflow 0.3.1):
+- Replaced bare tag sample/basecaller with dynamic closures and made sample-specific publishDir expressions dynamic.
+- Removed input arity (not supported in 23.04.2), normalized scalar/list staged inputs, fixed Path.toPath() directory scanning.
+- Minimum version now >=23.04.2; container remains wf-virus-longread:0.3.0.
+- Downloaded official Nextflow 23.04.2 and isolated Java 17 runtime under /tmp. Launcher required module exports/opens with java -jar in this environment; no system Java was changed.
+- Actual Nextflow engine runs passed: two-sample de novo; two-sample reference using one shared synthetic custom checkpoint, annotation disabled and mask depth 20; single-file de novo with automatic analysis_result destination.
+- Verified aggregate JSON sample counts/HTML, per-sample model provenance, mask BED and absent annotation directory.
+- Flye, NanoPlot, minimap2, samtools, bamCoverage, Clair3 and bcftools were test doubles in these engine runs; inputs.py, checkpoint preparation and report.py executed normally.
+- 13 Python tests, Bash syntax and git diff --check passed.
+- No real biological inference, real automatic model download, Docker or Windows EPI2ME execution was validated by these smoke runs. Annotation-enabled Nextflow execution was not included.

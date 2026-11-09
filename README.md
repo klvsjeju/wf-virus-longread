@@ -131,3 +131,10 @@ AF is expressed as a fraction (0.5 means 50%), so use 0.5 rather than 50. This e
 ## Workflow name
 
 The workflow is named wf-virus-longread. Its manifest expects the GitHub repository https://github.com/klvsjeju/wf-virus-longread. Rename the GitHub repository or publish the project at that URL before importing under the new name. The report is wf-virus-longread-report.html and the default container is wf-virus-longread:0.3.0. This is a naming change; VZV-oriented genome-size defaults and reference resources have not been generalized automatically.
+
+
+## Nextflow 23.04.2 compatibility fix (0.3.1)
+
+Task tags and sample-specific publish directories use dynamic closures so task inputs are resolved at execution time. The newer input arity option was removed, and single staged paths are explicitly wrapped as lists before building read/report arguments. Directory discovery uses the Nextflow Path directly rather than calling File.toPath(). The minimum Nextflow version is now 23.04.2. Workflow version 0.3.1 continues to use the wf-virus-longread:0.3.0 analysis image; no image dependency change is required for this script fix.
+
+Verified with Nextflow 23.04.2 and a temporary Java 17 runtime: two-sample de novo, two-sample reference with a shared custom checkpoint and annotation disabled, and single-file de novo with the default analysis_result output. External bioinformatics commands were replaced by test doubles. These runs validate process/channel/file wiring and reporting, not real Flye/Clair3 accuracy or container execution. The reference model preparation helper, FASTQ merge and report code executed normally against synthetic inputs. Python unit tests also passed (13 tests).

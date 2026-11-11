@@ -43,15 +43,15 @@
         "sample_sheet": {
           "type": "string",
           "title": "Sample sheet CSV",
-          "description": "A CSV file used to map barcodes to sample aliases. The sample sheet can be provided when the input data is a directory containing sub-directories with FASTQ files.",
+          "description": "Optional barcode,alias CSV for multiplex input. Match either barcode-named or alias-named folders and use alias as the sample name.",
           "format": "file-path",
-          "help_text": "The sample sheet is a CSV file with, minimally, columns named `barcode` and `alias`. Extra columns are allowed. A `type` column is required for certain workflows and should have the following values; `test_sample`, `positive_control`, `negative_control`, `no_template_control`."
+          "help_text": "Folders absent from the sheet are ignored with a warning. Sheet entries without folders are recorded as missing input. Providing both barcode and alias folders for the same row is an error. Barcodes must use barcode plus at least two digits, all the same length. Barcodes and aliases must be unique. Alias must not begin with barcode. Optional type values are test_sample, positive_control, negative_control and no_template_control. Single-file and flat-folder inputs use the sample name or input-derived name."
         },
         "sample": {
           "type": "string",
           "title": "Sample name",
-          "description": "A single sample name for non-multiplexed data. Permissible if passing a single .fastq(.gz) file or directory of .fastq(.gz) files.",
-          "default": "sample"
+          "description": "Optional name for one FASTQ file or a flat FASTQ folder. If empty, use the file stem or folder base name. For multiplex input, select a folder name or a sample sheet barcode/alias.",
+          "help_text": "Sample names use the wf-bacterial-genomes naming rules. Spaces in the final name become underscores. With a sample sheet, this field filters matching barcode or alias entries."
         }
       }
     },

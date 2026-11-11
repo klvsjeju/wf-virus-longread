@@ -4,10 +4,10 @@ A Nextflow DSL2 workflow for VZV reference-based analysis or de novo contig asse
 
 ## EPI2ME inputs
 
-1. **FASTQ file or folder**: Select a FASTQ/FQ file (plain or gzip compressed), a folder of FASTQ files for one sample, or a parent folder containing barcode/sample subfolders. One subdirectory level is supported. Use `sample` to name a single file or a single-sample folder. An optional `sample_sheet` CSV must contain `barcode,alias` columns and match all selected sample folders.
+1. **FASTQ file or folder**: Select a FASTQ/FQ file (plain or gzip compressed), a folder of FASTQ files for one sample, or a parent folder containing barcode/sample subfolders. One subdirectory level is supported. Leave `sample` empty for an automatic input-derived name, or provide a name for a single input / a filter for multiplex input. An optional `sample_sheet` CSV maps barcode or alias folders to sample names as described below.
 2. **Reference FASTA**: Upload/select your own uncompressed FASTA file. Enable **Reference-based assembly** to run reference analysis. No reference is bundled.
-3. **Manual basecalling model**: Leave unset to detect the model from fastcat statistics. If model counts are incomplete, the input helper also checks explicit model tags and versioned models in `RG:Z:` read-group tags. Metadata is saved to `metadata/<sample>/basecaller.json`. A manual selection takes priority over detection. Mixed detected models cause an error unless a manual override is supplied. De novo assembly also accepts FASTQ files without model tags. This setting identifies the model used for existing reads; it does not run basecalling.
-4. **De novo**: Disable Reference-based assembly to run QC and Flye. Outputs include `denovo/<sample>/<sample>.contigs.fasta` and the Flye output folder. No downstream Medaka/Clair3 polishing or reference-based consensus step is performed. Flye's own assembly and internal polishing steps are included.
+3. **Manual basecalling model**: Leave unset to detect the model from fastcat statistics. If model counts are incomplete, the input helper also checks explicit model tags and versioned models in `RG:Z:` read-group tags. Metadata is saved to `<sample>/metadata/basecaller.json`. A manual selection takes priority over detection. Mixed detected models cause an error unless a manual override is supplied. De novo assembly also accepts FASTQ files without model tags. This setting identifies the model used for existing reads; it does not run basecalling.
+4. **De novo**: Disable Reference-based assembly to run QC and Flye. Outputs include `<sample>/<sample>.contigs.fasta` and the Flye output folder. No downstream Medaka/Clair3 polishing or reference-based consensus step is performed. Flye's own assembly and internal polishing steps are included.
 
 Reference mode performs alignment, Clair3 variant calling, consensus generation, and snpEff annotation. Enable optional `run_annotation` only when snpEff annotation is needed; only then are `snpeff_config`, `snpeff_data`, and `snpeff_db` required. Clair3 checkpoints are selected automatically from the detected or manually specified basecalling model. No checkpoint directory or mapping TSV input is shown in EPI2ME.
 
@@ -23,6 +23,27 @@ Update paths in the example JSON files for your environment. When out_dir is uns
 Input UI formats (`path`, `file-path`) and the model selection list follow the [wf-bacterial-genomes schema](https://github.com/epi2me-labs/wf-bacterial-genomes/blob/master/nextflow_schema.json). Its Medaka stage has not been added to this workflow's de novo branch.
 
 See VALIDATION.txt for the validation scope.
+
+## Sample names and sample sheets (0.3.3)
+
+Naming and folder matching follow the installed wf-bacterial-genomes v2.0.2 ingress rules:
+
+| Input | `sample` empty | `sample` specified |
+| --- | --- | --- |
+| One FASTQ file | File simpleName (all extensions removed; `isolate.fastq.gz` becomes `isolate`) | Use the supplied name |
+| Folder containing FASTQ files directly | Folder baseName | Use the supplied name |
+| Parent folder with sample subfolders, no sheet | Use each subfolder baseName | Select only the matching subfolder baseName |
+| Parent folder with sample subfolders and sheet | Match folders against `barcode` or `alias`; use the sheet alias | Select the row matching the supplied barcode or alias; use its alias |
+
+Spaces in final names become underscores. The existing filename safety check still requires names to start with a letter or digit and contain only letters, digits, underscores, periods or hyphens. Duplicate final names are rejected. Names come from input paths or the sheet, not FASTQ read headers. A sheet does not rename single-file or flat-folder input.
+
+The CSV requires unique `barcode,alias` columns. Barcodes must start with `barcode`, followed by at least two digits, with the same length in every row. Aliases must be nonempty and must not start with `barcode`. Optional `type` values are `test_sample`, `positive_control`, `negative_control` and `no_template_control`; optional `analysis_group` must be populated for every row.
+
+Folders absent from the sheet are ignored with a warning. Sheet entries without matching FASTQ folders are recorded in the HTML report and `results.json` as missing input; they are not analysed. If only missing entries remain selected, the workflow produces a report without analysis tasks. Supplying both a barcode folder and its alias folder for the same sheet row is an error. Without a sheet, `sample` must match the original folder baseName; with a sheet it must match the original barcode or alias, before spaces are replaced.
+
+Reference result names use the resolved sample alias: `<sample>_norm.pass.vcf.gz` (PASS variants), `<sample>_norm.vcf.gz` (all normalized variants), `<sample>_merge_output.vcf.gz` (caller VCF), optional `<sample>_annot.vcf`, and `<sample>_consensus.fa`. VCF indexes retain the matching sample prefix. Pileup/full-alignment VCFs and their indexes, including nested per-chunk VCFs, are omitted from published results after calling finishes; original calling task outputs in the Nextflow work cache are retained. BAM, depth, de novo contig FASTA and NanoPlot output prefixes also use the resolved alias. A manually entered literal `sample` remains a literal name; leave it empty for input-derived naming or provide the actual name / sample sheet alias.
+
+For a single reference sequence, the consensus FASTA header is exactly `><sample>`. With multiple reference sequences, the first header is `><sample>` and subsequent records use `><sample>|contig2`, `><sample>|contig3`, etc. to keep identifiers unique. Only FASTA identifiers change; sequence generation and VCF reference chromosome identifiers are preserved.
 
 ## Manual additional options
 
@@ -55,6 +76,31 @@ Workflow-managed options, including input/output paths, reference, sample, mask 
 
 Option documentation: [samtools depth](https://www.htslib.org/doc/samtools-depth.html), [bcftools consensus](https://samtools.github.io/bcftools/bcftools.html#consensus), [Flye](https://github.com/fenderglass/Flye/blob/flye/docs/USAGE.md).
 
+## Result folder layout
+
+All per-sample outputs are grouped directly under `<out_dir>/<sample>/`:
+
+```text
+<out_dir>/
+  <sample>/
+    alignment/             # reference mode
+    clair3/                # reference mode: VCFs, consensus, mask, statistics
+    annot/                 # optional snpEff annotation
+    model_selection.json   # reference mode
+    qc/NanoPlot/
+    metadata/fastcat_stats/
+    metadata/basecaller.json
+    <sample>.contigs.fasta  # de novo mode
+    flye/                  # de novo mode
+  wf-virus-longread-report.html
+  results.json
+  execution/
+```
+
+Each additional sample has its own folder. The names `execution`, `results.json` and `wf-virus-longread-report.html` are reserved for shared outputs (case-insensitive). This replaces the older `reference/<sample>/result/`, `qc/<sample>/`, `metadata/<sample>/` and `denovo/<sample>/` nesting. Existing analysis output directories are not migrated automatically.
+
+`output_definition.json` registers the output root, each sample directory, and its analysis/QC/metadata/tool subfolders using the reference workflow's `inode/directory` MIME type. This lets EPI2ME treat them as folders for its native Open in Explorer action. The action is provided by Desktop, not by HTML report links; absent optional folders are not produced solely for display.
+
 ## EPI2ME results
 
 Details / Reports / Files / Logs are tabs provided by EPI2ME Desktop. The workflow does not need to create folders with those names.
@@ -62,13 +108,22 @@ Details / Reports / Files / Logs are tabs provided by EPI2ME Desktop. The workfl
 | Tab | Content provided by this workflow |
 | --- | --- |
 | Details | Run status and input settings collected by the app. Additional run information and options are also recorded in results.json and the HTML report. |
-| Reports | Top-level wf-virus-longread-report.html with per-sample models, contig/consensus counts and lengths, and links to QC and result files. NanoPlot and Nextflow execution reports are generated separately. |
+| Reports | Top-level wf-virus-longread-report.html using the reference workflow's EPI2ME Labs design, sample dropdowns, interactive plots and searchable tables. Includes sample/read summaries, assembly or variant/coverage/consensus statistics, optional snpEff results, models and file links. NanoPlot and Nextflow execution reports are generated separately. |
 | Files | Contigs, consensus, mask BED, BAM/BAI, VCF, annotations, depth, QC, metadata, and execution outputs described in output_definition.json. |
 | Logs | Nextflow/process logs collected by EPI2ME. Task execution records are also saved to execution/trace.tsv. |
 
 The aggregate report waits for all per-sample analysis, metadata, and QC results. If analysis fails, the aggregate report may not be generated; check Logs for the cause. `results.json` uses this workflow's own summary format rather than the official workflows' internal results/checkpoints format. `output_definition.json` follows the output description format used by official workflows.
 
 The report can be opened without external web resources. Preserve the output folder structure to use links to result files. If the EPI2ME embedded viewer restricts file links, open the files through the Files tab. Report discovery and tab rendering across Desktop versions have not yet been tested.
+
+The report uses the same `ezcharts.LabsReport`, `Tabs`, `DataTable`, fastcat QC and `EZChart` components as installed wf-bacterial-genomes v2.0.2. It runs inside the existing public wf-common image; no custom image build or new launch setting is required. The workflow version remains 0.3.3.
+
+- Sample summary retains barcode/alias metadata and lists missing input samples.
+- Read quality, length and base yield plots reuse fastcat histograms without rereading FASTQ. Median read length, yield and N50 use histogram bins. The histogram yield plot handles samples where the longest bin contributes at least half of the yield, and the quality axis includes Q scores above 30.
+- De novo shows Flye contig length, coverage, circular/repeat flags and multiplicity. Reference mode shows full normalized VCF counts before PASS filtering, Ts/Tv, complementary substitution heatmaps, indel length counts, coverage tables/plots and consensus/mask links.
+- Coverage statistics use all assessed positions from the existing samtools depth output, including zero-depth positions. Region-restricting depth options change which positions are assessed. Plots retain at most 500 mean-depth bins per reference, displaying the 20 longest references; full depth files and all-reference statistics remain available. Strand-specific coverage is not computed.
+- Optional snpEff tables show impact/effect counts and at most 500 annotation records per sample, with a link to the full TSV. Counts include each distinct impact/effect once per annotated record. Annotation and report variant statistics both use the full normalized VCF, including non-PASS records. Consensus uses the PASS VCF. Consensus options can select a subset of PASS variants.
+- Software versions lists the actual report runtime packages. The Execution section lists configured analysis image tags and run identifiers. Results retain the workflow's own JSON schema; they do not implement the reference workflow's internal checkpoint schema.
 
 
 ## Automatic Clair3 models (0.3.0)
@@ -84,7 +139,7 @@ Automatic exact matches:
 
 Unsupported or unknown basecaller names fail with guidance rather than silently using a different model. The manual basecaller field still includes older choices usable with custom checkpoints. These are upstream chemistry/basecaller matches, not VZV-specific accuracy validation. Some upstream models are marked deprecated. See [Rerio](https://github.com/nanoporetech/rerio) for model information and license terms.
 
-Model identity, source and file hashes are saved in `reference/<sample>/result/model_selection.json` and included in the aggregate report/results.json. Downloaded archives are hashed for provenance; unless the catalog supplies an expected sha256, the recorded hash is not an independent integrity guarantee. Archives are fetched over HTTPS and checked for unsafe paths/links and nonempty TensorFlow checkpoint files.
+Model identity, source and file hashes are saved in `<sample>/model_selection.json` and included in the aggregate report/results.json. Downloaded archives are hashed for provenance; unless the catalog supplies an expected sha256, the recorded hash is not an independent integrity guarantee. Archives are fetched over HTTPS and checked for unsafe paths/links and nonempty TensorFlow checkpoint files.
 
 Advanced CLI users may still supply `--model_dir` for a compatible custom checkpoint or `--model_dir` plus `--model_map` for a custom library. These options have been removed from the EPI2ME input schema. Neither is required for automatic selection.
 
@@ -108,7 +163,7 @@ The input location must be writable and visible to the execution environment. Yo
 
 ## Optional reference annotation
 
-`run_annotation` defaults to false. Reference mode still generates alignment, depth, variants, optional mask and consensus, but does not run snpEff/SnpSift or create annotation outputs. Enable Run reference annotation to additionally produce annot/annot.vcf and annot/var.tsv. Supply snpeff_config (snpEff configuration file defining the database), snpeff_data (database root containing DB_ID/snpEffectPredictor.bin), and snpeff_db (matching database ID). The database must match the input reference coordinates and contig names. De novo does not run this annotation stage.
+`run_annotation` defaults to false. Reference mode still generates alignment, depth, variants, optional mask and consensus, but does not run snpEff/SnpSift or create annotation outputs. Enable Run reference annotation to additionally produce annot/<sample>_annot.vcf and annot/var.tsv. Supply snpeff_config (snpEff configuration file defining the database), snpeff_data (database root containing DB_ID/snpEffectPredictor.bin), and snpeff_db (matching database ID). The database must match the input reference coordinates and contig names. De novo does not run this annotation stage.
 
 
 ## Fixed Flye read type
@@ -153,7 +208,7 @@ basecaller.json now records records_scanned, records_with_model and model_detect
 
 ## Shared steps and public images (0.3.2)
 
-The shared FASTQ ingestion, reference alignment and de novo assembly commands follow the installed wf-bacterial-genomes v2.0.2 release. Ingestion uses fastcat and threaded bgzip, writes file-level statistics under metadata/<sample>/fastcat_stats, and selects the basecaller from those statistics with the header fallback described above. Alignment uses mini_align with the map-ont preset and retains the workflow MAPQ filter. Flye uses the reference workflow's nano-hq input mode. The bacterial workflow's read length, DUST, polishing and annotation settings are specific to that workflow.
+The shared FASTQ ingestion, reference alignment and de novo assembly commands follow the installed wf-bacterial-genomes v2.0.2 release. Ingestion uses fastcat and threaded bgzip, writes file-level statistics under <sample>/metadata/fastcat_stats, and selects the basecaller from those statistics with the header fallback described above. Alignment uses mini_align with the map-ont preset and retains the workflow MAPQ filter. Flye uses the reference workflow's nano-hq input mode. The bacterial workflow's read length, DUST, polishing and annotation settings are specific to that workflow.
 
 The standard Docker profile selects these public images by task label:
 

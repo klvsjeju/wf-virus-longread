@@ -3,12 +3,12 @@ nextflow.enable.dsl = 2
 process INGEST {
  label 'wf_common'
  tag { sample }
- publishDir { "${params.out_dir}/metadata/${sample}" }, mode: 'copy', pattern: '{basecaller.json,fastcat_stats}'
+ publishDir { "${params.out_dir}/${sample}/metadata" }, mode: 'copy', pattern: '{basecaller.json,fastcat_stats}'
  input:
  tuple val(sample), path(reads, stageAs: 'chunks??/*')
  output:
  tuple val(sample), path('reads.fastq.gz'), path('basecaller.json'), emit: reads
- path 'fastcat_stats', emit: stats
+ tuple val(sample), path('fastcat_stats'), emit: stats
  script:
  def read_files = reads instanceof List ? reads : [reads]
  """
@@ -25,7 +25,7 @@ process INGEST {
 process QC {
  label 'nanoplot'
  tag { sample }
- publishDir { "${params.out_dir}/qc/${sample}" }, mode: 'copy'
+ publishDir { "${params.out_dir}/${sample}/qc" }, mode: 'copy'
  input:
  tuple val(sample), path(reads), path(metadata)
  output:
@@ -118,12 +118,13 @@ process CALL_CLAIR3 {
 process REFERENCE_ANALYSIS {
  label 'wf_bacterial'
  tag { sample }
- publishDir { "${params.out_dir}/reference/${sample}" }, mode: 'copy', enabled: !params.run_annotation
+ publishDir { "${params.out_dir}/${sample}" }, mode: 'copy', enabled: !params.run_annotation,
+   saveAs: { name -> name == 'result' ? null : name.replaceFirst(/^result\//, '') }
  input:
  tuple val(sample), path(alignment), path(coverage), path(clair3), path(provenance)
  tuple path(ref), path(fai), path(mmi)
  output:
- tuple val(sample), path('result')
+ tuple val(sample), path('result/*', type: 'any'), emit: results
  script:
  """
  mkdir result
@@ -155,17 +156,18 @@ process SNPEFF_ANNOTATE {
 process SNPSIFT_TABLE {
  label 'snpsift'
  tag { sample }
- publishDir { "${params.out_dir}/reference/${sample}" }, mode: 'copy'
+ publishDir { "${params.out_dir}/${sample}" }, mode: 'copy',
+   saveAs: { name -> name == 'result' ? null : name.replaceFirst(/^result\//, '') }
  input:
- tuple val(sample), path(source, stageAs: 'source_result'), path(annotated)
+ tuple val(sample), path(source, stageAs: 'source_result/*'), path(annotated)
  output:
- tuple val(sample), path('result')
+ tuple val(sample), path('result/*', type: 'any'), emit: results
  script:
  """
- cp -aL --reflink=auto '${source}' result
+ cp -aL --reflink=auto source_result result
  mkdir -p result/annot
- cp '${annotated}' result/annot/annot.vcf
- SnpSift extractFields -s ';' -e '.' result/annot/annot.vcf POS REF ALT \
+ cp '${annotated}' 'result/annot/${sample}_annot.vcf'
+ SnpSift extractFields -s ';' -e '.' 'result/annot/${sample}_annot.vcf' POS REF ALT \
    'ANN[*].GENE' 'ANN[*].IMPACT' 'ANN[*].EFFECT' 'GEN[0].GT' 'GEN[0].DP' 'GEN[0].AF' 'ANN[*].HGVS_C' 'ANN[*].HGVS_P' | \
    awk -v s='${sample}' 'BEGIN {OFS="\t"} NR==1 {sub(/^#/, ""); print "Sample",\$0; next} {print s,\$0}' > result/annot/var.tsv
  """
@@ -174,7 +176,7 @@ process SNPSIFT_TABLE {
 process DE_NOVO_CONTIGS {
  label 'wf_bacterial'
  tag { sample }
- publishDir { "${params.out_dir}/denovo/${sample}" }, mode: 'copy'
+ publishDir { "${params.out_dir}/${sample}" }, mode: 'copy'
  input:
  tuple val(sample), path(reads), path(metadata)
  output:
@@ -191,13 +193,14 @@ process SAMPLE_SUMMARY {
  label 'wf_common'
  tag { sample }
  input:
- tuple val(sample), path(metadata), path(qc), path(analysis)
+ tuple val(sample), path(metadata), path(qc), path(analysis, stageAs: 'analysis/*'), path(stats), path(flye)
  output:
  path 'summary.json'
  script:
  def mode = params.reference_based_assembly ? 'reference' : 'denovo'
+ def analysis_path = params.reference_based_assembly ? 'analysis' : analysis
  """
- python3 '${projectDir}/bin/report.py' sample '${sample}' '${mode}' '${metadata}' '${analysis}'
+ python3 '${projectDir}/bin/report.py' sample '${sample}' '${mode}' '${metadata}' '${analysis_path}' --stats '${stats}' --flye '${flye}' --mask-depth ${params.mask_depth}
  """
 }
 
@@ -206,11 +209,15 @@ process WORKFLOW_REPORT {
  publishDir params.out_dir, mode: 'copy'
  input:
  path summaries, stageAs: 'samples??/*'
+ val missing_samples
+ val sample_details
  output:
  path 'wf-virus-longread-report.html'
  path 'results.json'
  script:
  def settings = [workflow_version: workflow.manifest.version,
+   missing_samples: missing_samples,
+   sample_metadata: sample_details,
    run_name: workflow.runName, session_id: workflow.sessionId.toString(),
    reference_based_assembly: params.reference_based_assembly, reference: params.reference,
    run_annotation: params.run_annotation,
@@ -239,34 +246,43 @@ workflow {
  def root = file(params.fastq, checkIfExists: true)
  def isFq = { p -> p.isFile() && (p.name ==~ /.*\.(fastq|fq)(\.gz)?/) }
  def samples = []
- if (isFq(root)) samples << [params.sample, [root]]
+ def multiplex = false
+ if (isFq(root)) samples << [SampleNames.singleName(params.sample, root.simpleName), [root]]
  else if (root.isDirectory()) {
    def direct = root.listFiles().findAll { isFq(it) }.sort { it.name }
    def dirs = root.listFiles().findAll { it.isDirectory() && it.toAbsolutePath().normalize() != java.nio.file.Paths.get(params.out_dir.toString()).toAbsolutePath().normalize() }.sort { it.name }.collect { dir ->
-     [dir.name, dir.listFiles().findAll { isFq(it) }.sort { it.name }]
+     [dir.baseName, dir.listFiles().findAll { isFq(it) }.sort { it.name }]
    }.findAll { it[1] && (params.analyse_unclassified || it[0] != 'unclassified') }
    if (direct && dirs) error 'Do not mix top-level FASTQ and sample folders'
-   if (direct) samples << [params.sample, direct]
-   else samples.addAll(dirs)
+   if (direct) samples << [SampleNames.singleName(params.sample, root.baseName), direct]
+   else {
+     samples.addAll(dirs)
+     multiplex = true
+   }
  }
  if (!samples) error 'No FASTQ files found (supports one subdirectory level)'
- if (params.sample_sheet) {
-   if (!root.isDirectory() || root.listFiles().any { isFq(it) }) error 'sample_sheet requires sample/barcode subdirectories'
-   def rows = Channel.fromPath(params.sample_sheet, checkIfExists: true).splitCsv(header: true).toList()
-   // Perform CSV handling in a dataflow operator; keep sample ordering deterministic.
+ def missing_samples = Channel.value([])
+ def sample_details = Channel.value(samples.collectEntries { [(it[0]): [barcode: null]] })
+ if (multiplex) {
    def original = samples
-   def renamed = rows.map { records ->
-     if (!records || !records[0].containsKey('barcode') || !records[0].containsKey('alias')) error 'CSV needs barcode,alias columns'
-     def barcodes = records.collect { it.barcode }
-     if (barcodes.toSet().size() != barcodes.size()) error 'Duplicate barcode in CSV'
-     if (barcodes.toSet() != original.collect { it[0] }.toSet()) error 'CSV must exactly match selected barcode folders'
-     def mapping = records.collectEntries { [(it.barcode): it.alias] }
-     original.collect { row -> [mapping[row[0]], row[1]] }
+   def records = params.sample_sheet ?
+     Channel.fromPath(params.sample_sheet, checkIfExists: true).splitCsv(header: true, quote: '"').toList() :
+     Channel.value([])
+   def selection = records.map { sheet ->
+     def result = SampleNames.selectDirectory(original, params.sample_sheet ? sheet : null, params.sample)
+     result.warnings.each { log.warn it }
+     if (!result.samples && !result.missing) error 'No input samples match the selected sample name'
+     result
    }
-   samples = renamed.flatMap { it }
+   samples = selection.flatMap { it.samples }
+   missing_samples = selection.map { it.missing }
+   sample_details = selection.map { it.metadata }
  } else samples = Channel.fromList(samples)
  def validated = samples.map { sample, reads ->
    if (!(sample ==~ /[A-Za-z0-9][A-Za-z0-9_.-]*/)) error "Invalid sample name: ${sample}"
+   if (sample.toLowerCase() in ['execution', 'results.json', 'wf-virus-longread-report.html']) {
+     error "Sample name ${sample} conflicts with a shared workflow output; choose another sample name or alias"
+   }
    reads.each { p -> if (p.toString().contains("'") || p.toString().contains('\n')) error 'Quotes/newlines in paths are unsupported' }
    tuple(sample, reads)
  }.toList().flatMap { rows ->
@@ -303,21 +319,25 @@ workflow {
    BAM_COVERAGE(ALIGN_READS.out)
    CALL_CLAIR3(ALIGN_READS.out.join(sample_models), INDEX_REFERENCE.out)
    REFERENCE_ANALYSIS(ALIGN_READS.out.join(BAM_COVERAGE.out).join(CALL_CLAIR3.out), INDEX_REFERENCE.out)
-   analysis_results = REFERENCE_ANALYSIS.out
+   // Reference mode has no Flye directory; use an existing inert file for the path input.
+   analysis_results = REFERENCE_ANALYSIS.out.results.map { sample, result -> tuple(sample, result, file("${projectDir}/model_map.tsv")) }
    if (params.run_annotation) {
      def config = file(params.snpeff_config, checkIfExists: true)
      def data = file(params.snpeff_data, checkIfExists: true)
      if (!data.isDirectory()) error 'snpeff_data must be a directory'
      if (!file("${data}/${params.snpeff_db}/snpEffectPredictor.bin").exists()) error 'snpEff DB binary not found'
-     SNPEFF_ANNOTATE(analysis_results.map { sample, result -> tuple(sample, result.resolve('clair3/norm.vcf.gz')) }, config, data)
-     SNPSIFT_TABLE(analysis_results.join(SNPEFF_ANNOTATE.out))
-     analysis_results = SNPSIFT_TABLE.out
+     SNPEFF_ANNOTATE(REFERENCE_ANALYSIS.out.results.map { sample, result ->
+       tuple(sample, result.find { it.name == 'clair3' }.resolve("${sample}_norm.vcf.gz"))
+     }, config, data)
+     SNPSIFT_TABLE(REFERENCE_ANALYSIS.out.results.join(SNPEFF_ANNOTATE.out))
+     analysis_results = SNPSIFT_TABLE.out.results.map { sample, result -> tuple(sample, result, file("${projectDir}/model_map.tsv")) }
    }
  } else {
    DE_NOVO_CONTIGS(INGEST.out.reads)
-   analysis_results = DE_NOVO_CONTIGS.out.map { sample, contigs, flye -> tuple(sample, contigs) }
+   analysis_results = DE_NOVO_CONTIGS.out
  }
  metadata_results = INGEST.out.reads.map { sample, reads, metadata -> tuple(sample, metadata) }
- SAMPLE_SUMMARY(metadata_results.join(QC.out).join(analysis_results))
- WORKFLOW_REPORT(SAMPLE_SUMMARY.out.collect())
+ SAMPLE_SUMMARY(metadata_results.join(QC.out).join(analysis_results).join(INGEST.out.stats)
+   .map { sample, metadata, qc, analysis, flye, stats -> tuple(sample, metadata, qc, analysis, stats, flye) })
+ WORKFLOW_REPORT(SAMPLE_SUMMARY.out.toList(), missing_samples, sample_details)
 }

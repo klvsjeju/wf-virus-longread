@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Create portable workflow summary artifacts using staged task outputs."""
+"""Collect compact report data; render with the upstream EPI2ME Labs components."""
 import argparse
 import base64
-import html
+import csv
 import json
+from collections import Counter, defaultdict
 from pathlib import Path
-from urllib.parse import quote
 
 
 def fasta_stats(path):
@@ -20,51 +20,154 @@ def fasta_stats(path):
     return {'sequences': len(lengths), 'total_bases': sum(lengths), 'longest': max(lengths, default=0)}
 
 
-def sample_summary(sample, mode, metadata, analysis):
-    prefix = f'reference/{sample}/result' if mode == 'reference' else f'denovo/{sample}'
-    links = {'QC report': f'qc/{sample}/NanoPlot/{sample}_NanoPlot-report.html',
-             'Basecalling metadata': f'metadata/{sample}/basecaller.json'}
+def read_histograms(stats):
+    """Keep fastcat's pre-binned statistics instead of rereading input FASTQ."""
+    histograms = {}
+    if stats is not None:
+        for kind in ('length', 'quality'):
+            path = stats / (kind + '.hist')
+            if path.exists():
+                histograms[kind] = [[float(a), float(b), int(c)] for a, b, c in
+                                    csv.reader(path.open(), delimiter='\t') if int(c) > 0]
+    return histograms
+
+
+def read_summary(histograms, metadata):
+    lengths = histograms.get('length', [])
+    count = sum(row[2] for row in lengths)
+    median = None
+    if count:
+        cumulative = 0
+        for start, end, n in lengths:
+            cumulative += n
+            if cumulative >= count / 2:
+                median = int(start)
+                break
+    return {'read_count': count or metadata.get('records_scanned'),
+            'median_length': median,
+            'total_bases': int(sum(a * c for a, b, c in lengths)) if count else None,
+            'histograms': histograms}
+
+
+def coverage_summary(path, mask_depth, max_points=500):
+    """Stream depth twice; keep every position in statistics and bounded plot bins."""
+    if not path.exists():
+        return []
+    totals = {}
+    with path.open() as handle:
+        for line in handle:
+            chrom, pos, depth = line.split()[:3]
+            pos, depth = int(pos), int(depth)
+            row = totals.setdefault(chrom, {'reference': chrom, 'length': 0, 'positions': 0,
+                                          'depth_sum': 0, 'covered': 0, 'at_30x': 0,
+                                          'at_50x': 0, 'below_mask': 0})
+            row['length'] = max(row['length'], pos)
+            row['positions'] += 1
+            row['depth_sum'] += depth
+            row['covered'] += depth > 0
+            row['at_30x'] += depth >= 30
+            row['at_50x'] += depth >= 50
+            row['below_mask'] += depth < mask_depth
+    bins = {chrom: defaultdict(lambda: [0, 0]) for chrom in totals}
+    with path.open() as handle:
+        for line in handle:
+            chrom, pos, depth = line.split()[:3]
+            width = max(1, (totals[chrom]['length'] + max_points - 1) // max_points)
+            item = bins[chrom][(int(pos) - 1) // width]
+            item[0] += int(depth)
+            item[1] += 1
+    for chrom, row in totals.items():
+        n = row['positions']
+        row['mean_depth'] = row.pop('depth_sum') / n
+        for key in ('covered', 'at_30x', 'at_50x', 'below_mask'):
+            row[key + '_percent'] = 100 * row[key] / n
+        width = max(1, (row['length'] + max_points - 1) // max_points)
+        row['plot'] = [{'position': (i * width + 1 + min((i + 1) * width, row['length'])) / 2,
+                        'depth': total / count} for i, (total, count) in sorted(bins[chrom].items())]
+    return list(totals.values())
+
+
+def variant_summary(path):
+    if not path.exists():
+        return None
+    result = {'counts': {}, 'substitutions': {}, 'indels': [], 'ts': 0, 'tv': 0, 'ts_tv': None}
+    with path.open() as handle:
+        for line in handle:
+            fields = line.rstrip('\n').split('\t')
+            if fields[0] == 'SN':
+                result['counts'][fields[2].rstrip(':')] = int(fields[3])
+            elif fields[0] == 'TSTV':
+                result.update(ts=int(fields[2]), tv=int(fields[3]),
+                              ts_tv=float(fields[4]) if int(fields[3]) else None)
+            elif fields[0] == 'ST':
+                result['substitutions'][fields[2]] = int(fields[3])
+            elif fields[0] == 'IDD':
+                result['indels'].append({'length': int(fields[2]), 'count': int(fields[3])})
+    return result
+
+
+def annotations_summary(path, limit=500):
+    if not path.exists():
+        return None
+    preview, impacts, effects, count = [], Counter(), Counter(), 0
+    with path.open() as handle:
+        for row in csv.DictReader(handle, delimiter='\t'):
+            count += 1
+            if len(preview) < limit:
+                preview.append(row)
+            for key, target in [('ANN[*].IMPACT', impacts), ('ANN[*].EFFECT', effects)]:
+                # Count each unique value once per annotated VCF record.
+                target.update(set(row.get(key, '').split(';')) - {'', '.'})
+    return {'records': count, 'preview': preview, 'preview_limit': limit,
+            'impacts': dict(impacts), 'effects': dict(effects)}
+
+
+def sample_summary(sample, mode, metadata, analysis, stats=None, flye=None, mask_depth=0):
+    prefix = sample
+    links = {'QC report': f'{sample}/qc/NanoPlot/{sample}_NanoPlot-report.html',
+             'Basecalling metadata': f'{sample}/metadata/basecaller.json'}
+    extra = {}
     if mode == 'reference':
         fasta = analysis / 'clair3' / f'{sample}_consensus.fa'
         links.update({'Consensus FASTA': f'{prefix}/clair3/{sample}_consensus.fa',
-                      'Variants': f'{prefix}/clair3/norm.pass.vcf.gz',
+                      'Variants': f'{prefix}/clair3/{sample}_norm.pass.vcf.gz',
+                      'All normalized variants': f'{prefix}/clair3/{sample}_norm.vcf.gz',
                       'Alignment BAM': f'{prefix}/alignment/{sample}_sorted.bam',
                       'Depth': f'{prefix}/alignment/{sample}.depth',
                       'Clair3 model selection': f'{prefix}/model_selection.json'})
-        if (analysis / 'annot/var.tsv').exists():
+        extra['coverage'] = coverage_summary(analysis / 'alignment' / f'{sample}.depth', mask_depth)
+        extra['variants'] = variant_summary(analysis / 'clair3/variants.stats')
+        extra['variant_statistics_source'] = f'{sample}_norm.vcf.gz'
+        extra['annotations'] = annotations_summary(analysis / 'annot/var.tsv')
+        if extra['annotations'] is not None:
             links['Annotations'] = f'{prefix}/annot/var.tsv'
+            links['Annotated VCF'] = f'{prefix}/annot/{sample}_annot.vcf'
+        if (analysis / 'clair3/variants.stats').exists():
+            links['Variant statistics'] = f'{prefix}/clair3/variants.stats'
         if (analysis / 'clair3/low_coverage.bed').exists():
             links['Mask BED'] = f'{prefix}/clair3/low_coverage.bed'
     else:
         fasta = analysis
         links['Contigs FASTA'] = f'{prefix}/{sample}.contigs.fasta'
         links['Flye statistics'] = f'{prefix}/flye/assembly_info.txt'
+        info = flye / 'assembly_info.txt' if flye and flye.is_dir() else None
+        extra['contigs'] = list(csv.DictReader(info.open(), delimiter='\t')) if info and info.exists() else []
     model_info = analysis / 'model_selection.json' if mode == 'reference' else None
     selection = json.loads(model_info.read_text()) if model_info and model_info.exists() else None
-    return {'clair3_model': selection, 'sample': sample, 'mode': mode, 'basecaller': json.loads(metadata.read_text()),
-            'assembly': fasta_stats(fasta), 'files': links}
+    basecaller = json.loads(metadata.read_text())
+    return dict(extra, clair3_model=selection, sample=sample, mode=mode, basecaller=basecaller,
+                assembly=fasta_stats(fasta), reads=read_summary(read_histograms(stats), basecaller), files=links)
 
 
 def aggregate(summaries, settings, output):
+    from labs_report import render
     samples = sorted(summaries, key=lambda x: x['sample'])
-    results = {'workflow': 'wf-virus-longread', 'settings': settings, 'samples': samples}
-    (output / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
-    esc = lambda x: html.escape(str(x), quote=True)
-    sections = []
     for row in samples:
-        stats = row['assembly']
-        links = ''.join(f'<li><a href="{quote(path, safe="/")}">{esc(label)}</a></li>' for label, path in row['files'].items())
-        model = row.get('clair3_model') or {}
-        model_html = f'<p>Clair3: {esc(model.get("model_id", "Not used"))} · Source: {esc(model.get("source", "Not used"))}</p>'
-        sections.append(f'<section><h2>{esc(row["sample"])}</h2><p>Mode: {esc(row["mode"])} · Basecalling model: {esc(row["basecaller"].get("selected") or "Unknown")}</p>' +
-                        model_html + f'<p>Sequences: {stats["sequences"]} · Total bases: {stats["total_bases"]} · Longest: {stats["longest"]}</p><ul>{links}</ul></section>')
-    settings_html = ''.join(f'<tr><th>{esc(k)}</th><td>{esc(v)}</td></tr>' for k, v in sorted(settings.items()))
-    document = '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>wf-virus-longread report</title>'
-    document += '<style>body{font:16px system-ui,sans-serif;max-width:1100px;margin:40px auto;padding:0 24px;color:#172c38}section{border-top:1px solid #ccd;padding:16px 0}table{border-collapse:collapse}th,td{border:1px solid #ccd;padding:8px;text-align:left;overflow-wrap:anywhere}a{color:#006c85}</style>'
-    document += '<h1>wf-virus-longread analysis report</h1><p>Completed analysis outputs. De novo sequences are Flye contigs; reference sequences are variant-based consensus.</p>'
-    document += ''.join(sections) + '<h2>Run settings</h2><table>' + settings_html + '</table>'
-    document += '<h2>Execution</h2><ul><li><a href="execution/report.html">Nextflow execution report</a></li><li><a href="execution/timeline.html">Timeline</a></li><li><a href="execution/trace.tsv">Task trace</a></li></ul><p>Execution reports are finalized when Nextflow exits. Open result files through the EPI2ME Files tab if embedded report links are restricted.</p></html>'
-    (output / 'wf-virus-longread-report.html').write_text(document)
+        row['metadata'] = settings.get('sample_metadata', {}).get(row['sample'], {})
+    results = {'missing_samples': settings.get('missing_samples', []), 'workflow': 'wf-virus-longread',
+               'settings': settings, 'samples': samples}
+    (output / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
+    render(samples, settings, output)
 
 
 def main():
@@ -72,11 +175,14 @@ def main():
     sub = p.add_subparsers(dest='command', required=True)
     s = sub.add_parser('sample')
     s.add_argument('sample'); s.add_argument('mode'); s.add_argument('metadata', type=Path); s.add_argument('analysis', type=Path)
+    s.add_argument('--stats', type=Path); s.add_argument('--flye', type=Path)
+    s.add_argument('--mask-depth', type=int, default=0)
     a = sub.add_parser('aggregate')
-    a.add_argument('settings'); a.add_argument('summaries', nargs='+', type=Path)
+    a.add_argument('settings'); a.add_argument('summaries', nargs='*', type=Path)
     args = p.parse_args()
     if args.command == 'sample':
-        Path('summary.json').write_text(json.dumps(sample_summary(args.sample, args.mode, args.metadata, args.analysis), indent=2))
+        row = sample_summary(args.sample, args.mode, args.metadata, args.analysis, args.stats, args.flye, args.mask_depth)
+        Path('summary.json').write_text(json.dumps(row, indent=2))
     else:
         aggregate([json.loads(p.read_text()) for p in args.summaries], json.loads(base64.b64decode(args.settings)), Path('.'))
 

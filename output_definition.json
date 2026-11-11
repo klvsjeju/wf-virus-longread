@@ -2,8 +2,8 @@
   "files": {
     "workflow-report": {
       "filepath": "wf-virus-longread-report.html",
-      "title": "VZV workflow report",
-      "description": "VZV workflow report",
+      "title": "Virus long-read workflow report",
+      "description": "EPI2ME Labs report with sample/read summaries, assembly or variant/coverage results, optional snpEff annotations and output links.",
       "mime-type": "text/html",
       "optional": false,
       "type": "aggregated"
@@ -17,7 +17,7 @@
       "type": "aggregated"
     },
     "basecaller": {
-      "filepath": "metadata/{{ alias }}/basecaller.json",
+      "filepath": "{{ alias }}/metadata/basecaller.json",
       "title": "Basecalling model metadata",
       "description": "Basecalling model metadata",
       "mime-type": "application/json",
@@ -25,7 +25,7 @@
       "type": "per-sample"
     },
     "qc": {
-      "filepath": "qc/{{ alias }}/NanoPlot/{{ alias }}_NanoPlot-report.html",
+      "filepath": "{{ alias }}/qc/NanoPlot/{{ alias }}_NanoPlot-report.html",
       "title": "NanoPlot QC report",
       "description": "NanoPlot QC report",
       "mime-type": "text/html",
@@ -33,7 +33,7 @@
       "type": "per-sample"
     },
     "contigs": {
-      "filepath": "denovo/{{ alias }}/{{ alias }}.contigs.fasta",
+      "filepath": "{{ alias }}/{{ alias }}.contigs.fasta",
       "title": "De novo contigs FASTA",
       "description": "De novo contigs FASTA",
       "mime-type": "text/plain",
@@ -41,7 +41,7 @@
       "type": "per-sample"
     },
     "flye-stats": {
-      "filepath": "denovo/{{ alias }}/flye/assembly_info.txt",
+      "filepath": "{{ alias }}/flye/assembly_info.txt",
       "title": "Flye assembly statistics",
       "description": "Flye assembly statistics",
       "mime-type": "text/plain",
@@ -49,7 +49,7 @@
       "type": "per-sample"
     },
     "consensus": {
-      "filepath": "reference/{{ alias }}/result/clair3/{{ alias }}_consensus.fa",
+      "filepath": "{{ alias }}/clair3/{{ alias }}_consensus.fa",
       "title": "Reference consensus FASTA",
       "description": "Reference consensus FASTA",
       "mime-type": "text/plain",
@@ -57,7 +57,7 @@
       "type": "per-sample"
     },
     "mask": {
-      "filepath": "reference/{{ alias }}/result/clair3/low_coverage.bed",
+      "filepath": "{{ alias }}/clair3/low_coverage.bed",
       "title": "Low coverage mask BED",
       "description": "Low coverage mask BED",
       "mime-type": "text/plain",
@@ -65,15 +65,39 @@
       "type": "per-sample"
     },
     "variants": {
-      "filepath": "reference/{{ alias }}/result/clair3/norm.pass.vcf.gz",
+      "filepath": "{{ alias }}/clair3/{{ alias }}_norm.pass.vcf.gz",
       "title": "PASS variants VCF",
       "description": "PASS variants VCF",
       "mime-type": "application/gzip",
       "optional": true,
       "type": "per-sample"
     },
+    "normalized-variants": {
+      "filepath": "{{ alias }}/clair3/{{ alias }}_norm.vcf.gz",
+      "title": "All normalized variants VCF",
+      "description": "Normalized variants including non-PASS records.",
+      "mime-type": "application/gzip",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "annotated-variants": {
+      "filepath": "{{ alias }}/annot/{{ alias }}_annot.vcf",
+      "title": "Annotated variants VCF",
+      "description": "Normalized variants annotated with snpEff.",
+      "mime-type": "text/plain",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "variant-statistics": {
+      "filepath": "{{ alias }}/clair3/variants.stats",
+      "title": "All normalized variant statistics",
+      "description": "bcftools stats for all normalized variants before PASS filtering, used by the workflow report.",
+      "mime-type": "text/plain",
+      "optional": true,
+      "type": "per-sample"
+    },
     "annotations": {
-      "filepath": "reference/{{ alias }}/result/annot/var.tsv",
+      "filepath": "{{ alias }}/annot/var.tsv",
       "title": "Variant annotations TSV",
       "description": "Variant annotations TSV",
       "mime-type": "text/tab-separated-values",
@@ -81,7 +105,7 @@
       "type": "per-sample"
     },
     "alignment": {
-      "filepath": "reference/{{ alias }}/result/alignment/{{ alias }}_sorted.bam",
+      "filepath": "{{ alias }}/alignment/{{ alias }}_sorted.bam",
       "title": "Alignment BAM",
       "description": "Alignment BAM",
       "mime-type": "application/octet-stream",
@@ -89,7 +113,7 @@
       "type": "per-sample"
     },
     "alignment-index": {
-      "filepath": "reference/{{ alias }}/result/alignment/{{ alias }}_sorted.bam.bai",
+      "filepath": "{{ alias }}/alignment/{{ alias }}_sorted.bam.bai",
       "title": "Alignment BAM index",
       "description": "Alignment BAM index",
       "mime-type": "application/octet-stream",
@@ -97,7 +121,7 @@
       "type": "per-sample"
     },
     "depth": {
-      "filepath": "reference/{{ alias }}/result/alignment/{{ alias }}.depth",
+      "filepath": "{{ alias }}/alignment/{{ alias }}.depth",
       "title": "Per-position depth",
       "description": "Per-position depth",
       "mime-type": "text/tab-separated-values",
@@ -129,7 +153,7 @@
       "type": "aggregated"
     },
     "clair3-model-selection": {
-      "filepath": "reference/{{ alias }}/result/model_selection.json",
+      "filepath": "{{ alias }}/model_selection.json",
       "title": "Clair3 model provenance",
       "description": "Selected checkpoint, source and file hashes.",
       "mime-type": "application/json",
@@ -137,12 +161,92 @@
       "type": "per-sample"
     },
     "fastcat-stats": {
-      "filepath": "metadata/{{ alias }}/fastcat_stats",
+      "filepath": "{{ alias }}/metadata/fastcat_stats",
       "title": "FASTQ ingress statistics",
       "description": "File statistics, run IDs, basecaller counts and histograms from fastcat.",
       "mime-type": "inode/directory",
       "optional": false,
       "type": "per-sample"
+    },
+    "alignment-folder": {
+      "filepath": "{{ alias }}/alignment",
+      "title": "Alignment files",
+      "description": "BAM, index, coverage and alignment statistics.",
+      "mime-type": "inode/directory",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "clair3-folder": {
+      "filepath": "{{ alias }}/clair3",
+      "title": "Variants and consensus",
+      "description": "Normalized VCFs, consensus FASTA, masks and variant statistics.",
+      "mime-type": "inode/directory",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "annotation-folder": {
+      "filepath": "{{ alias }}/annot",
+      "title": "Annotation files",
+      "description": "Optional snpEff VCF and variant annotation table.",
+      "mime-type": "inode/directory",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "sample-qc-folder": {
+      "filepath": "{{ alias }}/qc",
+      "title": "Sample quality control",
+      "description": "NanoPlot outputs for this sample.",
+      "mime-type": "inode/directory",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "nanoplot-folder": {
+      "filepath": "{{ alias }}/qc/NanoPlot",
+      "title": "NanoPlot files",
+      "description": "Complete NanoPlot output directory.",
+      "mime-type": "inode/directory",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "sample-metadata-folder": {
+      "filepath": "{{ alias }}/metadata",
+      "title": "Sample input metadata",
+      "description": "Basecalling model metadata and fastcat statistics for this sample.",
+      "mime-type": "inode/directory",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "flye-folder": {
+      "filepath": "{{ alias }}/flye",
+      "title": "Flye files",
+      "description": "Complete Flye assembly output directory.",
+      "mime-type": "inode/directory",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "execution-folder": {
+      "filepath": "execution",
+      "title": "Execution files",
+      "description": "Nextflow execution report, timeline and task trace.",
+      "mime-type": "inode/directory",
+      "optional": true,
+      "type": "aggregated"
+    },
+    "sample-folder": {
+      "filepath": "{{ alias }}",
+      "title": "Sample output folder",
+      "description": "All analysis, QC and metadata outputs for this sample.",
+      "mime-type": "inode/directory",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "output-folder": {
+      "filepath": ".",
+      "title": "Analysis output folder",
+      "description": "All sample folders, the aggregate report and execution outputs.",
+      "mime-type": "inode/directory",
+      "optional": false,
+      "type": "aggregated"
     }
   }
 }

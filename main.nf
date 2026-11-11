@@ -11,14 +11,19 @@ process INGEST {
  tuple val(sample), path('fastcat_stats'), emit: stats
  script:
  def read_files = reads instanceof List ? reads : [reads]
+ def min_length = params.reference_based_assembly ? 0 : params.min_read_length
+ def length_filter = min_length ? "-a ${min_length}" : ''
+ def filtered_metadata = min_length ? '--filtered-reads reads.fastq.gz' : ''
+ def check_reads = min_length ? "python3 -c \"import gzip,sys; sys.exit(0 if gzip.open('reads.fastq.gz','rb').read(1) else 'No reads meet min_read_length=${min_length} bp; lower --min_read_length or use 0.')\"" : ''
  """
  mkdir fastcat_stats
- fastcat -s '${sample}' -f fastcat_stats/per-file-stats.tsv \
+ fastcat ${length_filter} -s '${sample}' -f fastcat_stats/per-file-stats.tsv \
    -i fastcat_stats/per-file-runids.tsv -l fastcat_stats/per-file-basecallers.tsv \
    --histograms histograms ${read_files.collect { "'${it}'" }.join(' ')} | bgzip -@ ${task.cpus} > reads.fastq.gz
  mv histograms/* fastcat_stats/
+ ${check_reads}
  python3 '${projectDir}/bin/inputs.py' fastcat-metadata --stats fastcat_stats --metadata basecaller.json \
-   --override '${params.override_basecaller_cfg ?: ''}' ${read_files.collect { "'${it}'" }.join(' ')}
+   --override '${params.override_basecaller_cfg ?: ''}' ${filtered_metadata} ${read_files.collect { "'${it}'" }.join(' ')}
  """
 }
 
@@ -224,6 +229,8 @@ process WORKFLOW_REPORT {
    min_mapq: params.min_mapq, min_coverage: params.min_coverage,
    mask_depth: params.mask_depth, mask_depth_opts: params.mask_depth_opts,
    consensus_opts: params.consensus_opts, flye_opts: params.flye_opts,
+   min_read_length: params.min_read_length,
+   effective_min_read_length: params.reference_based_assembly ? 0 : params.min_read_length,
    flye_read_type: 'nano-hq', flye_genome_size: params.flye_genome_size,
    override_basecaller_cfg: params.override_basecaller_cfg,
    container_override: params.container, containers: params.images, threads: params.threads]
@@ -238,7 +245,7 @@ workflow {
  if (params.help) { log.info 'See README.md. Required: --fastq. Default mode: de novo contigs only.'; return }
  if (!params.fastq) error 'Select --fastq (FASTQ file or directory)'
  if (!params.out_dir) error 'Unable to resolve output directory; specify --out_dir'
- ['threads','flye_genome_size','min_mapq','min_coverage','mask_depth'].each { k ->
+ ['threads','flye_genome_size','min_mapq','min_coverage','mask_depth','min_read_length'].each { k ->
    if (!(params[k].toString() ==~ /[0-9]+/)) error "--${k} must be an integer"
  }
  if ((params.threads as int) < 1 || (params.flye_genome_size as int) < 1) error 'threads and genome size must be positive'

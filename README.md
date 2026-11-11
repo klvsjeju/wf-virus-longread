@@ -45,6 +45,12 @@ Reference result names use the resolved sample alias: `<sample>_norm.pass.vcf.gz
 
 For a single reference sequence, the consensus FASTA header is exactly `><sample>`. With multiple reference sequences, the first header is `><sample>` and subsequent records use `><sample>|contig2`, `><sample>|contig3`, etc. to keep identifiers unique. Only FASTA identifiers change; sequence generation and VCF reference chromosome identifiers are preserved.
 
+## Minimum read length for de novo
+
+`min_read_length` defaults to 1000 bp, following wf-bacterial-genomes v2.0.2. Configure it in Advanced option in EPI2ME or pass `--min_read_length 2000` on the CLI (Nextflow parameters use two leading hyphens). In de novo mode, fastcat `-a` excludes shorter reads before NanoPlot QC and Flye; reads exactly at the threshold are kept. Use `--min_read_length 0` to disable the filter. Reference-based analysis ignores this setting.
+
+The report separates valid input reads, retained reads and reads below the minimum length using fastcat statistics. Fastcat histograms, basecaller metadata, NanoPlot and Flye describe the retained reads. Header fallback scans the retained FASTQ when the length filter is enabled. An input chunk with no retained reads is allowed if the sample still has other retained reads. The report records both the configured and effective minimum. If all reads are excluded, ingestion stops with guidance to lower the threshold.
+
 ## Manual additional options
 
 Enter additional argument strings under Advanced options in EPI2ME. Leave them empty to retain the existing behavior.

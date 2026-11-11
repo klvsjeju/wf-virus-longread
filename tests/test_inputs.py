@@ -121,5 +121,20 @@ class FastcatMetadataTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'every input'):
                 inputs.fastcat_metadata(stats, root / 'basecaller.json', [root / 'empty.fq'])
 
+    def test_filtered_empty_chunk_and_retained_header_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stats = self.write_stats(root, '', 1)
+            (stats / 'per-file-stats.tsv').write_text('filename\tn_seqs\na.fq\t0\nb.fq\t1\n')
+            retained = root / 'retained.fastq.gz'
+            with gzip.open(retained, 'wt') as handle:
+                handle.write(f'@read RG:Z:run_{self.MODEL}_barcode01\nACGT\n+\nIIII\n')
+            # Original chunks need not be reopened; filtered-out models cannot leak in.
+            inputs.fastcat_metadata(stats, root / 'basecaller.json',
+                                   [root / 'a.fq', root / 'b.fq'], filtered_reads=retained)
+            result = json.loads((root / 'basecaller.json').read_text())
+            self.assertEqual(result['selected'], self.MODEL)
+            self.assertEqual(result['records_scanned'], 1)
+
 if __name__ == '__main__':
     unittest.main()

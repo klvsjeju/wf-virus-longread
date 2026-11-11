@@ -32,7 +32,7 @@ def read_histograms(stats):
     return histograms
 
 
-def read_summary(histograms, metadata):
+def read_summary(histograms, metadata, stats=None):
     lengths = histograms.get('length', [])
     count = sum(row[2] for row in lengths)
     median = None
@@ -43,10 +43,19 @@ def read_summary(histograms, metadata):
             if cumulative >= count / 2:
                 median = int(start)
                 break
-    return {'read_count': count or metadata.get('records_scanned'),
+    result = {'read_count': count or metadata.get('records_scanned'),
             'median_length': median,
             'total_bases': int(sum(a * c for a, b, c in lengths)) if count else None,
             'histograms': histograms}
+    if stats is not None and (stats / 'per-file-stats.tsv').exists():
+        with (stats / 'per-file-stats.tsv').open() as handle:
+            rows = list(csv.DictReader(handle, delimiter='\t'))
+        result['input_read_count'] = sum(int(row.get('r_record_ok', row['n_seqs'])) for row in rows)
+        result['excluded_short_reads'] = sum(int(row.get('r_too_short', 0)) for row in rows)
+    else:
+        result['input_read_count'] = result['read_count']
+        result['excluded_short_reads'] = 0
+    return result
 
 
 def coverage_summary(path, mask_depth, max_points=500):
@@ -156,7 +165,7 @@ def sample_summary(sample, mode, metadata, analysis, stats=None, flye=None, mask
     selection = json.loads(model_info.read_text()) if model_info and model_info.exists() else None
     basecaller = json.loads(metadata.read_text())
     return dict(extra, clair3_model=selection, sample=sample, mode=mode, basecaller=basecaller,
-                assembly=fasta_stats(fasta), reads=read_summary(read_histograms(stats), basecaller), files=links)
+                assembly=fasta_stats(fasta), reads=read_summary(read_histograms(stats), basecaller, stats), files=links)
 
 
 def aggregate(summaries, settings, output):

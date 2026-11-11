@@ -22,10 +22,12 @@ class ReportTests(unittest.TestCase):
             row=report.sample_summary('sample1','denovo',meta,fasta)
             self.assertEqual(row['assembly'], {'sequences':2,'total_bases':6,'longest':4})
             self.assertNotIn('Consensus FASTA',row['files'])
-            report.aggregate([row],{'flye_opts':'--meta <test>'},p)
+            report.aggregate([row],{'flye_opts':'--meta <test>', 'effective_min_read_length':1000},p)
             text=(p/'wf-virus-longread-report.html').read_text()
             self.assertTrue('model&lt;a&gt;' in text)
             self.assertTrue('--meta &lt;test&gt;' in text)
+            self.assertTrue('De novo minimum read length: 1000 bp.' in text)
+            self.assertTrue('Fastcat histograms and retained read counts describe reads that passed the filter.' in text)
             self.assertEqual(json.loads((p/'results.json').read_text())['samples'][0]['sample'],'sample1')
 
     def test_reference_optional_mask(self):

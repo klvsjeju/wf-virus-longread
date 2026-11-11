@@ -32,6 +32,15 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(stats['total_bases'], 700)
         self.assertIsNone(report.read_summary({}, {})['median_length'])
 
+    def test_input_and_retained_read_counts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            stats = Path(directory)
+            (stats / 'per-file-stats.tsv').write_text('n_seqs\tr_record_ok\tr_too_short\n2\t4\t2\n0\t1\t1\n')
+            result = report.read_summary({'length': [[1000,1001,2]]}, {}, stats)
+            self.assertEqual(result['input_read_count'], 5)
+            self.assertEqual(result['read_count'], 2)
+            self.assertEqual(result['excluded_short_reads'], 3)
+
     def test_bcftools_stats_and_annotation_limits(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

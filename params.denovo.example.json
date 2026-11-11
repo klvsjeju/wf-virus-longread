@@ -2,5 +2,6 @@
   "fastq": "/mnt/d/chat/input/fastq",
   "sample": "VZV01",
   "reference_based_assembly": false,
-  "out_dir": "/mnt/d/chat/results/run01"
+  "out_dir": "/mnt/d/chat/results/run01",
+  "min_read_length": 1000
 }

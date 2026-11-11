@@ -199,8 +199,10 @@ def render(samples, settings, output):
         with report.add_section('Sample summary', 'Samples'):
             html.p('Analysis summary for each selected sample. Missing inputs are listed separately.')
             table([{'Barcode': row.get('metadata', {}).get('barcode') or '-', 'Alias': row['sample'],
-                    'Mode': row['mode'], 'Read count': row['reads']['read_count'],
-                    'Median read length (bp)': row['reads']['median_length'],
+                    'Mode': row['mode'], 'Input read count': row['reads'].get('input_read_count', row['reads']['read_count']),
+                    'Retained read count': row['reads']['read_count'],
+                    'Reads below minimum length': row['reads'].get('excluded_short_reads', 0),
+                    'Median retained read length (bp)': row['reads']['median_length'],
                     'Sequences': row['assembly']['sequences'],
                     'Total assembly / consensus length (bp)': row['assembly']['total_bases']}
                    for row in samples])
@@ -212,6 +214,11 @@ def render(samples, settings, output):
         with report.add_section('Read summary', 'Reads'):
             html.p('Read quality, read length and base yield from fastcat histograms. '
                    'Use the dropdown menu to select a sample. Median lengths use histogram bins.')
+            if settings.get('effective_min_read_length', 0):
+                html.p(f"De novo minimum read length: {settings['effective_min_read_length']} bp. "
+                       'Fastcat histograms and retained read counts describe reads that passed the filter. '
+                       'Input counts and reads below the minimum length are listed separately. '
+                       'NanoPlot QC and Flye use only reads that meet the minimum length.')
             histogram_dirs, names = [], []
             for index, sample in enumerate(samples):
                 hist = sample['reads']['histograms']

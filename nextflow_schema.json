@@ -103,6 +103,14 @@
           "title": "Estimated genome size (bp)",
           "description": "Estimated genome size for de novo assembly in non-SI prefix format (e.g 5000000 for 5 Mb genome)"
         },
+        "min_read_length": {
+          "type": "integer",
+          "title": "Minimum read length (bp)",
+          "description": "De novo only: exclude reads shorter than this length before QC and Flye.",
+          "default": 1000,
+          "minimum": 0,
+          "help_text": "Uses fastcat -a, as in wf-bacterial-genomes. Reads equal to the threshold are retained. Set 0 to disable length filtering. Reference-based analysis ignores this setting. The report separates input and retained read counts. Fastcat histograms, NanoPlot and Flye use retained reads. If no reads remain, lower the threshold."
+        },
         "flye_opts": {
           "type": "string",
           "title": "Additional Flye options",

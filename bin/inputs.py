@@ -85,11 +85,13 @@ def write_metadata(metadata, detected, override, detection_sources, records, rec
 
 
 
-def fastcat_metadata(stats, metadata, paths, override=''):
+def fastcat_metadata(stats, metadata, paths, override='', filtered_reads=None):
     """Use fastcat stats and scan headers when its model counts are incomplete."""
     with (stats / 'per-file-stats.tsv').open(newline='') as handle:
         file_counts = [int(row['n_seqs']) for row in csv.DictReader(handle, delimiter='\t')]
-    if len(file_counts) != len(paths) or not all(file_counts):
+    if (len(file_counts) != len(paths) or not sum(file_counts)
+            or any(count < 0 for count in file_counts)
+            or (filtered_reads is None and not all(file_counts))):
         raise ValueError('fastcat did not report reads for every input FASTQ')
     records = sum(file_counts)
     with (stats / 'per-file-basecallers.tsv').open(newline='') as handle:
@@ -106,7 +108,7 @@ def fastcat_metadata(stats, metadata, paths, override=''):
         # Read the original files without recompressing them.
         fallback_sources = {}
         fallback_tagged = 0
-        for path in paths:
+        for path in ([filtered_reads] if filtered_reads is not None else paths):
             opener = gzip.open if str(path).endswith('.gz') else open
             with opener(path, 'rb') as handle:
                 for index, line in enumerate(handle):
@@ -160,6 +162,7 @@ def main():
     f.add_argument('--stats', type=Path, required=True)
     f.add_argument('--metadata', required=True)
     f.add_argument('--override', default='')
+    f.add_argument('--filtered-reads', type=Path)
     f.add_argument('paths', nargs='+')
     r = sub.add_parser('model')
     r.add_argument('--root', required=True)
@@ -170,7 +173,7 @@ def main():
         if a.command == 'merge':
             merge(a.paths, a.output, a.metadata, a.override)
         elif a.command == 'fastcat-metadata':
-            fastcat_metadata(a.stats, a.metadata, a.paths, a.override)
+            fastcat_metadata(a.stats, a.metadata, a.paths, a.override, a.filtered_reads)
         else:
             print(model(a.root, a.mapping, a.metadata))
     except (ValueError, OSError, KeyError, json.JSONDecodeError) as e:

@@ -1,20 +1,29 @@
 nextflow.enable.dsl = 2
 
 process INGEST {
+ label 'wf_common'
  tag { sample }
- publishDir { "${params.out_dir}/metadata/${sample}" }, mode: 'copy', pattern: 'basecaller.json'
+ publishDir { "${params.out_dir}/metadata/${sample}" }, mode: 'copy', pattern: '{basecaller.json,fastcat_stats}'
  input:
  tuple val(sample), path(reads, stageAs: 'chunks??/*')
  output:
- tuple val(sample), path('reads.fastq.gz'), path('basecaller.json')
+ tuple val(sample), path('reads.fastq.gz'), path('basecaller.json'), emit: reads
+ path 'fastcat_stats', emit: stats
  script:
  def read_files = reads instanceof List ? reads : [reads]
  """
- python3 '${projectDir}/bin/inputs.py' merge --output reads.fastq.gz --metadata basecaller.json --override '${params.override_basecaller_cfg ?: ''}' ${read_files.collect { "'${it}'" }.join(' ')}
+ mkdir fastcat_stats
+ fastcat -s '${sample}' -f fastcat_stats/per-file-stats.tsv \
+   -i fastcat_stats/per-file-runids.tsv -l fastcat_stats/per-file-basecallers.tsv \
+   --histograms histograms ${read_files.collect { "'${it}'" }.join(' ')} | bgzip -@ ${task.cpus} > reads.fastq.gz
+ mv histograms/* fastcat_stats/
+ python3 '${projectDir}/bin/inputs.py' fastcat-metadata --stats fastcat_stats --metadata basecaller.json \
+   --override '${params.override_basecaller_cfg ?: ''}' ${read_files.collect { "'${it}'" }.join(' ')}
  """
 }
 
 process QC {
+ label 'nanoplot'
  tag { sample }
  publishDir { "${params.out_dir}/qc/${sample}" }, mode: 'copy'
  input:
@@ -28,19 +37,20 @@ process QC {
 }
 
 process INDEX_REFERENCE {
+ label 'wf_bacterial'
  input:
  path source, stageAs: 'input.fa'
  output:
- tuple path('reference.fa'), path('reference.fa.fai'), path('reference.mmi')
+ tuple path('reference.fa'), path('reference.fa.fai'), path('reference.fa.map-ont.mmi')
  script:
  """
  cp input.fa reference.fa
- samtools faidx reference.fa
- minimap2 -x map-ont -d reference.mmi reference.fa
+ mini_align -X -r reference.fa -t ${task.cpus}
  """
 }
 
 process PREPARE_CLAIR3_MODEL {
+ label 'clair3'
  tag { basecaller }
  input:
  val basecaller
@@ -56,32 +66,113 @@ process PREPARE_CLAIR3_MODEL {
  """
 }
 
-process REFERENCE_ANALYSIS {
+process ALIGN_READS {
+ label 'wf_bacterial'
  tag { sample }
- publishDir { "${params.out_dir}/reference/${sample}" }, mode: 'copy', pattern: 'result'
  input:
- tuple val(sample), path(reads), path(metadata), path(model_root, stageAs: 'models'), path(model_provenance)
+ tuple val(sample), path(reads), path(metadata)
  tuple path(ref), path(fai), path(mmi)
- path config, stageAs: 'snpEff.config'
- path data, stageAs: 'snpeff_data'
+ output:
+ tuple val(sample), path('alignment')
+ script:
+ """
+ mkdir alignment
+ mini_align -i '${reads}' -r '${ref}' -p raw -t ${task.cpus} -m
+ samtools view -b -F 0x904 -q ${params.min_mapq} -o 'alignment/${sample}_sorted.bam' raw.bam
+ samtools index -@ ${task.cpus} 'alignment/${sample}_sorted.bam'
+ samtools flagstat 'alignment/${sample}_sorted.bam' > 'alignment/${sample}_flagstat.txt'
+ """
+}
+
+process BAM_COVERAGE {
+ label 'deeptools'
+ tag { sample }
+ input:
+ tuple val(sample), path(alignment)
+ output:
+ tuple val(sample), path("${sample}.bedgraph")
+ script:
+ """
+ bamCoverage -b '${alignment}/${sample}_sorted.bam' -o '${sample}.bedgraph' --outFileFormat bedgraph -p ${task.cpus}
+ """
+}
+
+process CALL_CLAIR3 {
+ label 'clair3'
+ tag { sample }
+ input:
+ tuple val(sample), path(alignment), path(model_root, stageAs: 'models'), path(provenance)
+ tuple path(ref), path(fai), path(mmi)
+ output:
+ tuple val(sample), path('clair3'), path('model_selection.json', includeInputs: true)
+ script:
+ """
+ run_clair3.sh --bam_fn="\$PWD/${alignment}/${sample}_sorted.bam" --ref_fn="\$PWD/${ref}" \
+   --model_path="\$(realpath '${model_root}')" --sample_name='${sample}' --threads=${task.cpus} \
+   --platform=ont --output="\$PWD/clair3" --chunk_size=25000 --include_all_ctgs \
+   --haploid_sensitive --no_phasing_for_fa --min_coverage=${params.min_coverage} \
+   --enable_long_indel --remove_intermediate_dir
+ """
+}
+
+process REFERENCE_ANALYSIS {
+ label 'wf_bacterial'
+ tag { sample }
+ publishDir { "${params.out_dir}/reference/${sample}" }, mode: 'copy', enabled: !params.run_annotation
+ input:
+ tuple val(sample), path(alignment), path(coverage), path(clair3), path(provenance)
+ tuple path(ref), path(fai), path(mmi)
  output:
  tuple val(sample), path('result')
  script:
  """
- realpath '${model_root}' > selected_model.txt
- mkdir -p result
- cp '${model_provenance}' result/model_selection.json
- export SAMPLE='${sample}' READS='${reads}' REF='${ref}' MMI='${mmi}'
- export THREADS=${task.cpus} MAPQ=${params.min_mapq} MIN_COVERAGE=${params.min_coverage} MASK_DEPTH=${params.mask_depth}
+ mkdir result
+ cp -aL --reflink=auto '${alignment}' '${clair3}' '${provenance}' result/
+ cp '${coverage}' result/alignment/
+ export SAMPLE='${sample}' REF='${ref}' MASK_DEPTH=${params.mask_depth}
  export OPTIONS_RUNNER='${projectDir}/bin/run_options.py'
  export MASK_DEPTH_OPTS_B64='${(params.mask_depth_opts ?: '').toString().bytes.encodeBase64().toString()}'
  export CONSENSUS_OPTS_B64='${(params.consensus_opts ?: '').toString().bytes.encodeBase64().toString()}'
- export RUN_ANNOTATION='${params.run_annotation}' SNPEFF_DB='${params.run_annotation ? params.snpeff_db : ''}'
  bash '${projectDir}/bin/reference.sh'
  """
 }
 
+process SNPEFF_ANNOTATE {
+ label 'snpeff'
+ tag { sample }
+ input:
+ tuple val(sample), path(variants)
+ path config, stageAs: 'snpEff.config'
+ path data, stageAs: 'snpeff_data'
+ output:
+ tuple val(sample), path('annot.vcf')
+ script:
+ """
+ snpEff ann -c snpEff.config -dataDir "\$PWD/snpeff_data" -ud 0 -no-intergenic '${params.snpeff_db}' '${variants}' > annot.vcf
+ """
+}
+
+process SNPSIFT_TABLE {
+ label 'snpsift'
+ tag { sample }
+ publishDir { "${params.out_dir}/reference/${sample}" }, mode: 'copy'
+ input:
+ tuple val(sample), path(source, stageAs: 'source_result'), path(annotated)
+ output:
+ tuple val(sample), path('result')
+ script:
+ """
+ cp -aL --reflink=auto '${source}' result
+ mkdir -p result/annot
+ cp '${annotated}' result/annot/annot.vcf
+ SnpSift extractFields -s ';' -e '.' result/annot/annot.vcf POS REF ALT \
+   'ANN[*].GENE' 'ANN[*].IMPACT' 'ANN[*].EFFECT' 'GEN[0].GT' 'GEN[0].DP' 'GEN[0].AF' 'ANN[*].HGVS_C' 'ANN[*].HGVS_P' | \
+   awk -v s='${sample}' 'BEGIN {OFS="\t"} NR==1 {sub(/^#/, ""); print "Sample",\$0; next} {print s,\$0}' > result/annot/var.tsv
+ """
+}
+
 process DE_NOVO_CONTIGS {
+ label 'wf_bacterial'
  tag { sample }
  publishDir { "${params.out_dir}/denovo/${sample}" }, mode: 'copy'
  input:
@@ -97,6 +188,7 @@ process DE_NOVO_CONTIGS {
 }
 
 process SAMPLE_SUMMARY {
+ label 'wf_common'
  tag { sample }
  input:
  tuple val(sample), path(metadata), path(qc), path(analysis)
@@ -110,6 +202,7 @@ process SAMPLE_SUMMARY {
 }
 
 process WORKFLOW_REPORT {
+ label 'wf_common'
  publishDir params.out_dir, mode: 'copy'
  input:
  path summaries, stageAs: 'samples??/*'
@@ -126,7 +219,7 @@ process WORKFLOW_REPORT {
    consensus_opts: params.consensus_opts, flye_opts: params.flye_opts,
    flye_read_type: 'nano-hq', flye_genome_size: params.flye_genome_size,
    override_basecaller_cfg: params.override_basecaller_cfg,
-   container: params.container, threads: params.threads]
+   container_override: params.container, containers: params.images, threads: params.threads]
  def summary_files = summaries instanceof List ? summaries : [summaries]
  def encoded = groovy.json.JsonOutput.toJson(settings).bytes.encodeBase64().toString()
  """
@@ -181,7 +274,7 @@ workflow {
    rows
  }
  INGEST(validated)
- QC(INGEST.out)
+ QC(INGEST.out.reads)
  def analysis_results
  if (params.reference_based_assembly) {
    ['reference'].each { k -> if (!params[k]) error "Reference mode requires --${k}" }
@@ -192,31 +285,39 @@ workflow {
    def ref = file(params.reference, checkIfExists: true)
    if (params.model_map && !params.model_dir) error '--model_map requires --model_dir; leave both unset for automatic models'
    def models = file(params.model_dir ?: "${projectDir}/model_map.tsv", checkIfExists: true)
-   def config = file(params.run_annotation ? params.snpeff_config : "${projectDir}/model_map.tsv", checkIfExists: true)
-   def data = file(params.run_annotation ? params.snpeff_data : "${projectDir}/model_map.tsv", checkIfExists: true)
    def mapping = file(params.model_map ?: "${projectDir}/model_map.tsv", checkIfExists: true)
    if (!ref.isFile()) error 'reference must be a FASTA file'
    if (params.model_dir && !models.isDirectory()) error 'model_dir must be a directory'
-   if (params.run_annotation && !data.isDirectory()) error 'snpeff_data must be a directory'
-   if (params.run_annotation && !file("${data}/${params.snpeff_db}/snpEffectPredictor.bin").exists()) error 'snpEff DB binary not found'
    INDEX_REFERENCE(ref)
-   def keyed_reads = INGEST.out.map { sample, reads, metadata ->
+   def keyed_reads = INGEST.out.reads.map { sample, reads, metadata ->
      def basecaller = new groovy.json.JsonSlurper().parseText(metadata.text).selected ?: 'unknown'
      if (!(basecaller ==~ /[A-Za-z0-9_.@+-]+/)) error 'Invalid basecaller name in FASTQ metadata'
      tuple(basecaller, sample, reads, metadata)
    }
    PREPARE_CLAIR3_MODEL(keyed_reads.map { key, sample, reads, metadata -> key }.unique(), models, mapping,
      file("${projectDir}/clair3_model_catalog.json", checkIfExists: true))
-   def model_reads = keyed_reads.combine(PREPARE_CLAIR3_MODEL.out, by: 0).map { key, sample, reads, metadata, checkpoint, provenance ->
-     tuple(sample, reads, metadata, checkpoint, provenance)
-   }
-   REFERENCE_ANALYSIS(model_reads, INDEX_REFERENCE.out, config, data)
+   def sample_models = keyed_reads.map { key, sample, reads, metadata -> tuple(key, sample) }
+     .combine(PREPARE_CLAIR3_MODEL.out, by: 0)
+     .map { key, sample, checkpoint, provenance -> tuple(sample, checkpoint, provenance) }
+   ALIGN_READS(INGEST.out.reads, INDEX_REFERENCE.out)
+   BAM_COVERAGE(ALIGN_READS.out)
+   CALL_CLAIR3(ALIGN_READS.out.join(sample_models), INDEX_REFERENCE.out)
+   REFERENCE_ANALYSIS(ALIGN_READS.out.join(BAM_COVERAGE.out).join(CALL_CLAIR3.out), INDEX_REFERENCE.out)
    analysis_results = REFERENCE_ANALYSIS.out
+   if (params.run_annotation) {
+     def config = file(params.snpeff_config, checkIfExists: true)
+     def data = file(params.snpeff_data, checkIfExists: true)
+     if (!data.isDirectory()) error 'snpeff_data must be a directory'
+     if (!file("${data}/${params.snpeff_db}/snpEffectPredictor.bin").exists()) error 'snpEff DB binary not found'
+     SNPEFF_ANNOTATE(analysis_results.map { sample, result -> tuple(sample, result.resolve('clair3/norm.vcf.gz')) }, config, data)
+     SNPSIFT_TABLE(analysis_results.join(SNPEFF_ANNOTATE.out))
+     analysis_results = SNPSIFT_TABLE.out
+   }
  } else {
-   DE_NOVO_CONTIGS(INGEST.out)
+   DE_NOVO_CONTIGS(INGEST.out.reads)
    analysis_results = DE_NOVO_CONTIGS.out.map { sample, contigs, flye -> tuple(sample, contigs) }
  }
- metadata_results = INGEST.out.map { sample, reads, metadata -> tuple(sample, metadata) }
+ metadata_results = INGEST.out.reads.map { sample, reads, metadata -> tuple(sample, metadata) }
  SAMPLE_SUMMARY(metadata_results.join(QC.out).join(analysis_results))
  WORKFLOW_REPORT(SAMPLE_SUMMARY.out.collect())
 }

@@ -135,6 +135,14 @@
       "mime-type": "application/json",
       "optional": true,
       "type": "per-sample"
+    },
+    "fastcat-stats": {
+      "filepath": "metadata/{{ alias }}/fastcat_stats",
+      "title": "FASTQ ingress statistics",
+      "description": "File statistics, run IDs, basecaller counts and histograms from fastcat.",
+      "mime-type": "inode/directory",
+      "optional": false,
+      "type": "per-sample"
     }
   }
 }

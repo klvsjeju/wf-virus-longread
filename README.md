@@ -6,7 +6,7 @@ A Nextflow DSL2 workflow for VZV reference-based analysis or de novo contig asse
 
 1. **FASTQ file or folder**: Select a FASTQ/FQ file (plain or gzip compressed), a folder of FASTQ files for one sample, or a parent folder containing barcode/sample subfolders. One subdirectory level is supported. Use `sample` to name a single file or a single-sample folder. An optional `sample_sheet` CSV must contain `barcode,alias` columns and match all selected sample folders.
 2. **Reference FASTA**: Upload/select your own uncompressed FASTA file. Enable **Reference-based assembly** to run reference analysis. No reference is bundled.
-3. **Manual basecalling model**: Leave unset to detect the model from the FASTQ header tags `basecall_model_version_id`, `basecall_model`, or `model_version_id`. All read headers are inspected, and metadata is saved to `metadata/<sample>/basecaller.json`. A manual selection takes priority over detection. Mixed detected models cause an error unless a manual override is supplied. De novo assembly also accepts FASTQ files without model tags. This setting identifies the model used for existing reads; it does not run basecalling.
+3. **Manual basecalling model**: Leave unset to detect the model from fastcat statistics. If model counts are incomplete, the input helper also checks explicit model tags and versioned models in `RG:Z:` read-group tags. Metadata is saved to `metadata/<sample>/basecaller.json`. A manual selection takes priority over detection. Mixed detected models cause an error unless a manual override is supplied. De novo assembly also accepts FASTQ files without model tags. This setting identifies the model used for existing reads; it does not run basecalling.
 4. **De novo**: Disable Reference-based assembly to run QC and Flye. Outputs include `denovo/<sample>/<sample>.contigs.fasta` and the Flye output folder. No downstream Medaka/Clair3 polishing or reference-based consensus step is performed. Flye's own assembly and internal polishing steps are included.
 
 Reference mode performs alignment, Clair3 variant calling, consensus generation, and snpEff annotation. Enable optional `run_annotation` only when snpEff annotation is needed; only then are `snpeff_config`, `snpeff_data`, and `snpeff_db` required. Clair3 checkpoints are selected automatically from the detected or manually specified basecalling model. No checkpoint directory or mapping TSV input is shown in EPI2ME.
@@ -14,16 +14,15 @@ Reference mode performs alignment, Clair3 variant calling, consensus generation,
 ## CLI execution
 
 ```bash
-docker build -t wf-virus-longread:0.3.0 .
 nextflow run . -profile standard --fastq /path/to/reads --out_dir output
 nextflow run . -profile standard -params-file params.reference.example.json
 ```
 
-Update paths in the example JSON files for your environment. When out_dir is unset, results are written to analysis_result inside the selected FASTQ directory, or beside the selected FASTQ file. Running from GitHub also requires building `wf-virus-longread:0.3.0` locally or specifying an accessible image with `--container`.
+Update paths in the example JSON files for your environment. When out_dir is unset, results are written to analysis_result inside the selected FASTQ directory, or beside the selected FASTQ file. The standard profile pulls the public images listed below when they are absent from the Docker cache.
 
 Input UI formats (`path`, `file-path`) and the model selection list follow the [wf-bacterial-genomes schema](https://github.com/epi2me-labs/wf-bacterial-genomes/blob/master/nextflow_schema.json). Its Medaka stage has not been added to this workflow's de novo branch.
 
-The EPI2ME Desktop input UI and complete analysis have not yet been tested. See VALIDATION.txt for the validation scope.
+See VALIDATION.txt for the validation scope.
 
 ## Manual additional options
 
@@ -76,7 +75,7 @@ The report can be opened without external web resources. Preserve the output fol
 
 Clair3 is pinned to 1.2.0, which uses TensorFlow checkpoints. Clair3 2.x PyTorch checkpoints are incompatible with this workflow. The model catalog records exact model download URLs from Rerio revision `198f90f33434437001ad0d023e3ca912cdbca47c`.
 
-Reference runs prepare one checkpoint per distinct selected basecaller and share it among matching samples. The workflow checks for matching preinstalled models in `/opt/clair3-models` and `/opt/conda/bin/models`, then downloads the required archive from the official Oxford Nanopore model CDN if absent. Network access is required for downloads. Completed preparation tasks can be reused with Nextflow `-resume` when their work directory/cache remain available; this is not a permanent cross-run download cache.
+Reference runs prepare one checkpoint per distinct selected basecaller and share it among matching samples. The workflow checks for matching preinstalled models in `/opt/clair3-models`, `/opt/models` and `/opt/conda/bin/models`, then downloads the required archive from the official Oxford Nanopore model CDN if absent. Network access is required for downloads. Completed preparation tasks can be reused with Nextflow `-resume` when their work directory/cache remain available; this is not a permanent cross-run download cache.
 
 Automatic exact matches:
 
@@ -89,7 +88,7 @@ Model identity, source and file hashes are saved in `reference/<sample>/result/m
 
 Advanced CLI users may still supply `--model_dir` for a compatible custom checkpoint or `--model_dir` plus `--model_map` for a custom library. These options have been removed from the EPI2ME input schema. Neither is required for automatic selection.
 
-After updating from 0.2.0, build the new image with `docker build -t wf-virus-longread:0.3.0 .`, make it available to the Docker engine used by EPI2ME, push the source changes and update the installed workflow. GitHub import does not build the image. Older Word guides describe 0.2.0 and do not include these changes.
+The standard Docker profile uses the public Clair3 1.2.0 image. Older Word guides describe 0.2.0.
 
 ## EPI2ME launch form organization
 
@@ -98,7 +97,7 @@ The workflow input groups appear in this order: Input options, Sample options, A
 
 ## Memory, container and default output
 
-Each task requests a fixed 4 GB of memory. The memory and Docker image fields are removed from the EPI2ME form. The container remains necessary for the standard Docker profile; its configured image must be available to the Docker engine. An advanced CLI --container override remains supported, while --memory does not change the fixed process memory.
+Each task requests a fixed 4 GB of memory. The memory and Docker image fields are removed from the EPI2ME form. The standard profile uses a public image per tool group. The CLI `--container` override applies to NanoPlot, Clair3, deepTools, snpEff and SnpSift. Common tasks use the two reference workflow images.
 
 When out_dir is omitted or empty:
 - FASTQ file /data/reads/sample.fastq.gz -> /data/reads/analysis_result
@@ -130,7 +129,7 @@ AF is expressed as a fraction (0.5 means 50%), so use 0.5 rather than 50. This e
 
 ## Workflow name
 
-The workflow is named wf-virus-longread. Its manifest expects the GitHub repository https://github.com/klvsjeju/wf-virus-longread. Rename the GitHub repository or publish the project at that URL before importing under the new name. The report is wf-virus-longread-report.html and the default container is wf-virus-longread:0.3.0. This is a naming change; VZV-oriented genome-size defaults and reference resources have not been generalized automatically.
+The workflow is named wf-virus-longread. Its manifest expects the GitHub repository https://github.com/klvsjeju/wf-virus-longread. Rename the GitHub repository or publish the project at that URL before importing under the new name. The report is wf-virus-longread-report.html. This is a naming change; VZV-oriented genome-size defaults and reference resources have not been generalized automatically.
 
 
 ## Nextflow 23.04.2 compatibility fix (0.3.1)
@@ -138,3 +137,39 @@ The workflow is named wf-virus-longread. Its manifest expects the GitHub reposit
 Task tags and sample-specific publish directories use dynamic closures so task inputs are resolved at execution time. The newer input arity option was removed, and single staged paths are explicitly wrapped as lists before building read/report arguments. Directory discovery uses the Nextflow Path directly rather than calling File.toPath(). The minimum Nextflow version is now 23.04.2. Workflow version 0.3.1 continues to use the wf-virus-longread:0.3.0 analysis image; no image dependency change is required for this script fix.
 
 Verified with Nextflow 23.04.2 and a temporary Java 17 runtime: two-sample de novo, two-sample reference with a shared custom checkpoint and annotation disabled, and single-file de novo with the default analysis_result output. External bioinformatics commands were replaced by test doubles. These runs validate process/channel/file wiring and reporting, not real Flye/Clair3 accuracy or container execution. The reference model preparation helper, FASTQ merge and report code executed normally against synthetic inputs. Python unit tests also passed (13 tests).
+
+
+## Container dependency conflict fix
+
+DeepTools 3.5.6 requires NumPy 2, while Clair3 1.2.0 uses TensorFlow requiring NumPy below 2. Use deepTools 3.5.5, numpy>=1.23.5,<2 and CPU TensorFlow 2.15.0. The complete linux-64 dependency set passed a Conda libmamba dry-run; see dependency-solve-summary.json. These pins apply when building the optional combined analysis image with Dockerfile.
+
+
+## FASTQ read-group model detection fix
+
+The input helper accepts explicit basecall_model_version_id, basecall_model and model_version_id key=value tags, and now also extracts versioned DNA/RNA basecaller names embedded in RG:Z:runid_model_barcode read-group tags (or RG=...). Explicit valid model tags take priority over the read-group fallback. Unknown placeholder values do not count as a model. Barcode and modified-base suffixes are excluded from the versioned basecaller name. Model detection does not guess from read sequences, quality or filenames. The Python header parser runs as a fallback after fastcat when model metadata is incomplete.
+
+basecaller.json now records records_scanned, records_with_model and model_detection_sources. The RG fix was verified with synthetic plain/gzip FASTQ, explicit-tag precedence, mixed-model detection and missing metadata. It has not yet been checked against the user's failing FASTQ. The current release also uses fastcat and parallel bgzip for ingestion.
+
+
+## Shared steps and public images (0.3.2)
+
+The shared FASTQ ingestion, reference alignment and de novo assembly commands follow the installed wf-bacterial-genomes v2.0.2 release. Ingestion uses fastcat and threaded bgzip, writes file-level statistics under metadata/<sample>/fastcat_stats, and selects the basecaller from those statistics with the header fallback described above. Alignment uses mini_align with the map-ont preset and retains the workflow MAPQ filter. Flye uses the reference workflow's nano-hq input mode. The bacterial workflow's read length, DUST, polishing and annotation settings are specific to that workflow.
+
+The standard Docker profile selects these public images by task label:
+
+| Step | Image |
+| --- | --- |
+| FASTQ ingestion and reporting | ontresearch/wf-common:shafdd79f8e4a6faad77513c36f623693977b92b08e |
+| Index, alignment, Flye and consensus postprocessing | ontresearch/wf-bacterial-genomes:shab005a1bd7d4bb439bd864fecf5223e2741a53631 |
+| Clair3 model preparation and calling | hkubal/clair3:v1.2.0 |
+| Read QC | quay.io/biocontainers/nanoplot:1.43.0--pyhdfd78af_1 |
+| BAM coverage | quay.io/biocontainers/deeptools:3.5.5--pyhdfd78af_0 |
+| Optional annotation | quay.io/biocontainers/snpeff:5.4.0c--hdfd78af_0 |
+| Optional annotation table | quay.io/biocontainers/snpsift:5.2--hdfd78af_0 |
+
+Docker pulls each image when its first task runs. To update an EPI2ME installation, install the complete updated workflow tree so main.nf, nextflow.config, bin and the model catalog come from the same revision. Use the standard profile. The local profile requires the listed tools, including fastcat, bgzip and mini_align, on PATH.
+
+
+The public snpEff 5.4.0c image supports the existing Dumas DB, whose stored database version is 5.4. A temporary database built with snpEff 5.2 was also successfully annotated with this image. The original pOka DB binary was unavailable during this check.
+
+The 0.3.2 validation used real public containers on the EPI2ME WSL Docker daemon. A single synthetic sample completed reference alignment, variant calling, masking, consensus, annotation and reporting. The same synthetic dataset completed de novo Flye assembly and reporting. See VALIDATION.txt for test scope and the two-sample channel test.

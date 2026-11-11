@@ -66,3 +66,33 @@ Nextflow compatibility fix (2026-11-09, workflow 0.3.1):
 - Flye, NanoPlot, minimap2, samtools, bamCoverage, Clair3 and bcftools were test doubles in these engine runs; inputs.py, checkpoint preparation and report.py executed normally.
 - 13 Python tests, Bash syntax and git diff --check passed.
 - No real biological inference, real automatic model download, Docker or Windows EPI2ME execution was validated by these smoke runs. Annotation-enabled Nextflow execution was not included.
+
+Container dependency fix (2026-11-09):
+- Resolved deepTools 3.5.6 NumPy>=2 conflict with Clair3 1.2.0/TensorFlow NumPy<2.
+- Pinned deepTools 3.5.5, numpy>=1.23.5,<2 and tensorflow=2.15.0=cpu*.
+- Complete linux-64 Conda libmamba dry-run succeeded with numpy 1.26.4 and CPU TensorFlow/TensorFlow-base 2.15.0; package summary saved.
+- 13 Python tests, Bash syntax and diff whitespace checks passed.
+- No Docker daemon available here; actual image build and inference not verified. Rebuild required with the updated environment.yml.
+
+FASTQ model extraction fix (2026-11-10):
+- Compared fastcat fc_fastqcomments.c/fc_read.c: upstream supports legacy model comments and read-group fallback.
+- Added versioned DNA/RNA basecaller extraction from RG:Z: / RG= comments, with explicit model tag precedence and model-detection counters.
+- 17 unit tests passed, including synthetic plain/gzip RG FASTQ, barcode/modified-base suffixes, conflicting model detection and no guessing from IDs/notes.
+- User input FASTQ has not been provided; the specific failing header and actual rerun are not verified. Unversioned RG models and BAM-header DS parsing are not implemented.
+- Ingestion speed optimizations are separate and remain pending.
+
+Reference workflow alignment and public containers (2026-11-11, workflow 0.3.2):
+- Compared installed wf-bacterial-genomes v2.0.2 main.nf, lib/ingress.nf, nextflow.config and MANIFEST under the Windows EPI2ME workflow directory.
+- Shared commands now use fastcat plus threaded bgzip, fastcat basecaller counts, mini_align for indexing/alignment, and Flye --nano-hq. File statistics and histograms are published.
+- Preserved earlier RG header fallback, manual model precedence, exact-match Clair3 preparation, sample aliases, custom mask/consensus/Flye options, optional annotation, memory 4 GB and default analysis_result destination.
+- Split coverage, Clair3, postprocessing, snpEff and SnpSift tasks to use public versioned images. Docker Hub and Quay manifests were successfully queried for every configured image.
+- Confirmed remote manifests for both upstream ONT tags, in addition to local execution.
+- Used the actual EPI2ME WSL Docker daemon and Nextflow 23.04.2 with synthetic read data in /tmp/wf-virus-public.asKz81. Installed workflow files were not replaced during tests.
+- Reference run completed with real fastcat/bgzip, mini_align, NanoPlot, deepTools, Clair3 1.2.0, bcftools, snpEff and SnpSift. An injected T>A variant at NC_001348.1:15701 was called and annotated. Mask BED, consensus, BAM/index, VCF, model provenance, annotation TSV and aggregate HTML were generated.
+- Automatic RG model detection selected SUP v5.0.0 for all 40 synthetic reads; the official Clair3 bundled r1041_e82_400bps_sup_v500 checkpoints were used.
+- De novo run completed with actual Flye and aggregate reporting on the same synthetic read set (estimated genome size 12000 for the covered interval).
+- Existing Dumas DB stores version 5.4. Configured public snpEff 5.4.0c to read it. Also built a temporary DB using snpEff 5.2 and successfully annotated it with the 5.4.0c image. The earlier pOka binary itself was unavailable for this check.
+- Updated helpers for the Python version supplied by the public Clair3 image.
+- 20 Python tests, Bash syntax, JSON parsing, earlier UI/option requirement checks and git diff --check passed.
+- Two-sample reference channel wiring also passed using test doubles with Nextflow 23.04.2. Actual public-image tests used one synthetic sample. Real biological accuracy and the user's original failing FASTQ were not assessed.
+- The Dockerfile/environment.yml and dependency solve summary describe the optional combined image. The default standard profile now pulls public per-step images.

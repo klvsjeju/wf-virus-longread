@@ -58,7 +58,7 @@ def download(url, destination):
             with urlopen(url, timeout=120) as src, destination.open('wb') as dst:
                 if not src.geturl().startswith('https://'):
                     raise ValueError('Refusing a non-HTTPS model redirect')
-                while chunk := src.read(1024 * 1024):
+                for chunk in iter(lambda: src.read(1024 * 1024), b''):
                     digest.update(chunk)
                     dst.write(chunk)
             return digest.hexdigest()
@@ -130,7 +130,7 @@ def main():
     try:
         prepare(args.basecaller, args.catalog, args.output, args.provenance,
                 args.custom_root or None, args.mapping,
-                bundled_roots=('/opt/clair3-models', '/opt/conda/bin/models'))
+                bundled_roots=('/opt/clair3-models', '/opt/models', '/opt/conda/bin/models'))
     except (ValueError, OSError, tarfile.TarError, KeyError) as e:
         p.exit(2, f'Clair3 model preparation failed: {e}\n')
 

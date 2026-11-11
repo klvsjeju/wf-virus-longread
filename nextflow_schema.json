@@ -96,7 +96,7 @@
             "dna_r9.4.1_e8.1_hac",
             "dna_r9.4.1_e8.1_hac_prom"
           ],
-          "help_text": "Leave unset to infer from FASTQ headers. A manual choice overrides detection. Reference mode automatically prepares an exact-match Clair3 1.x checkpoint for supported models; see README.md for the supported list. This does not run basecalling."
+          "help_text": "Leave unset for automatic model detection with fastcat. A header fallback supports explicit model tags and versioned models in RG:Z: read-group tags. A manual selection overrides detection. Reference mode prepares a compatible Clair3 1.x checkpoint for supported models."
         },
         "flye_genome_size": {
           "type": "integer",

@@ -1,0 +1,51 @@
+{
+  "check": "Conda libmamba linux-64 dry-run (CPU); not a Docker build",
+  "success": true,
+  "packages": [
+    {
+      "name": "python",
+      "version": "3.10.22",
+      "build": "h267e890_0_cpython"
+    },
+    {
+      "name": "numpy",
+      "version": "1.26.4",
+      "build": "py310hb13e2d6_0"
+    },
+    {
+      "name": "snpeff",
+      "version": "5.2",
+      "build": "hdfd78af_3"
+    },
+    {
+      "name": "snpsift",
+      "version": "5.2",
+      "build": "hdfd78af_0"
+    },
+    {
+      "name": "tensorflow-base",
+      "version": "2.15.0",
+      "build": "cpu_py310h7e4d085_2"
+    },
+    {
+      "name": "tensorflow",
+      "version": "2.15.0",
+      "build": "cpu_py310h7825f03_2"
+    },
+    {
+      "name": "clair3",
+      "version": "1.2.0",
+      "build": "py310h779eee5_0"
+    },
+    {
+      "name": "nanoplot",
+      "version": "1.43.0",
+      "build": "pyhdfd78af_1"
+    },
+    {
+      "name": "deeptools",
+      "version": "3.5.5",
+      "build": "pyhdfd78af_0"
+    }
+  ]
+}

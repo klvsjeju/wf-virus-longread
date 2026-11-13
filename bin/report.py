@@ -96,6 +96,19 @@ def coverage_summary(path, mask_depth, max_points=500):
     return list(totals.values())
 
 
+def coverage_with_strands(directory, sample, mask_depth=0):
+    rows = coverage_summary(directory / f'{sample}.depth', mask_depth)
+    for strand in ('fwd', 'rev'):
+        other = {row['reference']: row for row in
+                 coverage_summary(directory / f'{sample}.{strand}.depth', mask_depth)}
+        for row in rows:
+            points = {p['position']: p['depth'] for p in other.get(row['reference'], {}).get('plot', [])}
+            for point in row['plot']:
+                if point['position'] in points:
+                    point[strand] = points[point['position']]
+    return rows
+
+
 def variant_summary(path):
     if not path.exists():
         return None
@@ -131,7 +144,7 @@ def annotations_summary(path, limit=500):
             'impacts': dict(impacts), 'effects': dict(effects)}
 
 
-def sample_summary(sample, mode, metadata, analysis, stats=None, flye=None, mask_depth=0):
+def sample_summary(sample, mode, metadata, analysis, stats=None, flye=None, mask_depth=0, coverage=None):
     prefix = sample
     links = {'QC report': f'{sample}/qc/NanoPlot/{sample}_NanoPlot-report.html',
              'Basecalling metadata': f'{sample}/metadata/basecaller.json'}
@@ -144,7 +157,7 @@ def sample_summary(sample, mode, metadata, analysis, stats=None, flye=None, mask
                       'Alignment BAM': f'{prefix}/alignment/{sample}_sorted.bam',
                       'Depth': f'{prefix}/alignment/{sample}.depth',
                       'Clair3 model selection': f'{prefix}/model_selection.json'})
-        extra['coverage'] = coverage_summary(analysis / 'alignment' / f'{sample}.depth', mask_depth)
+        extra['coverage'] = coverage_with_strands(analysis / 'alignment', sample, mask_depth)
         extra['variants'] = variant_summary(analysis / 'clair3/variants.stats')
         extra['variant_statistics_source'] = f'{sample}_norm.vcf.gz'
         extra['annotations'] = annotations_summary(analysis / 'annot/var.tsv')
@@ -157,10 +170,18 @@ def sample_summary(sample, mode, metadata, analysis, stats=None, flye=None, mask
             links['Mask BED'] = f'{prefix}/clair3/low_coverage.bed'
     else:
         fasta = analysis
+        extra['coverage'] = coverage_with_strands(coverage, sample) if coverage and coverage.is_dir() else []
+        if coverage and coverage.is_dir():
+            links['Depth'] = f'{sample}/coverage/{sample}.depth'
         links['Contigs FASTA'] = f'{prefix}/{sample}.contigs.fasta'
         links['Flye statistics'] = f'{prefix}/flye/assembly_info.txt'
         info = flye / 'assembly_info.txt' if flye and flye.is_dir() else None
         extra['contigs'] = list(csv.DictReader(info.open(), delimiter='\t')) if info and info.exists() else []
+    if extra.get('coverage'):
+        directory = 'alignment' if mode == 'reference' else 'coverage'
+        for strand in ('fwd', 'rev'):
+            if any(strand in p for row in extra['coverage'] for p in row['plot']):
+                links[f'{strand} depth'] = f'{sample}/{directory}/{sample}.{strand}.depth'
     model_info = analysis / 'model_selection.json' if mode == 'reference' else None
     selection = json.loads(model_info.read_text()) if model_info and model_info.exists() else None
     basecaller = json.loads(metadata.read_text())
@@ -185,12 +206,13 @@ def main():
     s = sub.add_parser('sample')
     s.add_argument('sample'); s.add_argument('mode'); s.add_argument('metadata', type=Path); s.add_argument('analysis', type=Path)
     s.add_argument('--stats', type=Path); s.add_argument('--flye', type=Path)
+    s.add_argument('--coverage', type=Path)
     s.add_argument('--mask-depth', type=int, default=0)
     a = sub.add_parser('aggregate')
     a.add_argument('settings'); a.add_argument('summaries', nargs='*', type=Path)
     args = p.parse_args()
     if args.command == 'sample':
-        row = sample_summary(args.sample, args.mode, args.metadata, args.analysis, args.stats, args.flye, args.mask_depth)
+        row = sample_summary(args.sample, args.mode, args.metadata, args.analysis, args.stats, args.flye, args.mask_depth, args.coverage)
         Path('summary.json').write_text(json.dumps(row, indent=2))
     else:
         aggregate([json.loads(p.read_text()) for p in args.summaries], json.loads(base64.b64decode(args.settings)), Path('.'))

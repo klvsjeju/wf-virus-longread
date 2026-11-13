@@ -97,7 +97,7 @@ def variant_plots(sample):
             html.p('No substitutions were found for this sample.')
         if stats['indels']:
             frame = pd.DataFrame(stats['indels'])
-            plot = ezc.barplot(data=frame, x='length', y='count', color='#007C91')
+            plot = ezc.histplot(data=frame['length'], x='length', discrete=True, weights=frame['count'], title='Insertion and deletion lengths')
             plot._fig.xaxis.axis_label = 'Indel length / bases (deletions negative)'
             plot._fig.yaxis.axis_label = 'Number of sites'
             EZChart(plot, 'epi2melabs')
@@ -107,6 +107,9 @@ def variant_plots(sample):
 
 def coverage_plots(sample):
     rows = sample.get('coverage', [])
+    if not rows:
+        html.p('No coverage data for sample, check input data and assembly quality.')
+        return
     table([{'Reference': row['reference'], 'Reference span (bp)': row['length'],
             'Positions assessed': row['positions'], 'Mean depth': round(row['mean_depth'], 2),
             'Covered (%)': round(row['covered_percent'], 3),
@@ -114,7 +117,9 @@ def coverage_plots(sample):
             'Coverage at 50x (%)': round(row['at_50x_percent'], 3)} for row in rows])
     for row in sorted(rows, key=lambda item: item['length'], reverse=True)[:20]:
         if row['plot']:
-            plot = ezc.lineplot(data=pd.DataFrame(row['plot']), x='position', y='depth',
+            data = [{'position': p['position'], 'depth': p[key], 'strand': label}
+                    for p in row['plot'] for key, label in [('depth','total'),('fwd','fwd'),('rev','rev')] if key in p]
+            plot = ezc.lineplot(data=pd.DataFrame(data), x='position', y='depth', hue='strand',
                                 title=row['reference'], marker=False)
             plot._fig.xaxis.axis_label = 'Position along reference / bp'
             plot._fig.yaxis.axis_label = 'Mean sequencing depth'
@@ -128,7 +133,7 @@ def assembly_table(sample):
     if contigs:
         table([{label: row.get(key, '-') for key, label in names.items()} for row in contigs])
     else:
-        html.p('Flye contig-level statistics are unavailable; see the assembly totals below.')
+        html.p('No contig-level assembly data are available for this sample. Check input data and assembly quality.')
 
 
 def consensus_table(sample):
@@ -203,7 +208,7 @@ def render(samples, settings, output):
                     'Retained read count': row['reads']['read_count'],
                     'Reads below minimum length': row['reads'].get('excluded_short_reads', 0),
                     'Median retained read length (bp)': row['reads']['median_length'],
-                    'Sequences': row['assembly']['sequences'],
+                    ('Contig count' if row['mode']=='denovo' else 'Consensus sequences'): row['assembly']['sequences'],
                     'Total assembly / consensus length (bp)': row['assembly']['total_bases']}
                    for row in samples])
             missing = settings.get('missing_samples', [])
@@ -211,34 +216,35 @@ def render(samples, settings, output):
                 html.h3('Missing input samples')
                 table([{'Barcode': row['barcode'], 'Alias': row['alias'], 'Status': 'Missing input'}
                        for row in missing])
-        with report.add_section('Read summary', 'Reads'):
-            html.p('Read quality, read length and base yield from fastcat histograms. '
-                   'Use the dropdown menu to select a sample. Median lengths use histogram bins.')
-            if settings.get('effective_min_read_length', 0):
-                html.p(f"De novo minimum read length: {settings['effective_min_read_length']} bp. "
-                       'Fastcat histograms and retained read counts describe reads that passed the filter. '
-                       'Input counts and reads below the minimum length are listed separately. '
-                       'NanoPlot QC and Flye use only reads that meet the minimum length.')
-            histogram_dirs, names = [], []
-            for index, sample in enumerate(samples):
-                hist = sample['reads']['histograms']
-                if not hist.get('length') or not hist.get('quality'):
-                    continue
-                directory = root / str(index)
-                directory.mkdir()
-                for kind, rows in hist.items():
-                    with (directory / (kind + '.hist')).open('w') as handle:
-                        for start, end, count in rows:
-                            if kind == 'length':
-                                start, end = int(start), int(end)
-                            handle.write(f'{start}\t{end}\t{count}\n')
-                histogram_dirs.append(str(directory))
-                names.append(sample['sample'])
-            if names:
-                HistogramSummary(seq_summary=tuple(histogram_dirs), sample_names=tuple(names),
-                                 alignment_stats=False)
-            else:
-                html.p('No read histograms available. See the per-sample NanoPlot QC reports under Result files.')
+        if any(row['reads']['histograms'].get('length') and row['reads']['histograms'].get('quality') for row in samples):
+            with report.add_section('Read summary', 'Reads'):
+                html.p('Read quality, read length and base yield from fastcat histograms. '
+                       'Use the dropdown menu to select a sample. Median lengths use histogram bins.')
+                if settings.get('effective_min_read_length', 0):
+                    html.p(f"De novo minimum read length: {settings['effective_min_read_length']} bp. "
+                           'Fastcat histograms and retained read counts describe reads that passed the filter. '
+                           'Input counts and reads below the minimum length are listed separately. '
+                           'NanoPlot QC and Flye use only reads that meet the minimum length.')
+                histogram_dirs, names = [], []
+                for index, sample in enumerate(samples):
+                    hist = sample['reads']['histograms']
+                    if not hist.get('length') or not hist.get('quality'):
+                        continue
+                    directory = root / str(index)
+                    directory.mkdir()
+                    for kind, rows in hist.items():
+                        with (directory / (kind + '.hist')).open('w') as handle:
+                            for start, end, count in rows:
+                                if kind == 'length':
+                                    start, end = int(start), int(end)
+                                handle.write(f'{start}\t{end}\t{count}\n')
+                    histogram_dirs.append(str(directory))
+                    names.append(sample['sample'])
+                if names:
+                    HistogramSummary(seq_summary=tuple(histogram_dirs), sample_names=tuple(names),
+                                     alignment_stats=False)
+                else:
+                    html.p('No read histograms available. See the per-sample NanoPlot QC reports under Result files.')
         denovo = [row for row in samples if row['mode'] == 'denovo']
         reference = [row for row in samples if row['mode'] == 'reference']
         if denovo:
@@ -257,12 +263,6 @@ def render(samples, settings, output):
                         'Transversions': row['variants']['tv'], 'Ts/Tv': row['variants']['ts_tv']}
                        for row in reference if row.get('variants')])
                 per_sample(reference, variant_plots)
-            with report.add_section('Genome coverage', 'Depth'):
-                html.p('Total depth after alignment filtering, using the selected samtools depth options. '
-                       'Percentages use assessed positions; region-restricting options can exclude positions. '
-                       'Plots show mean depth in at most 500 bins per reference, for up to 20 longest references. '
-                       'The downloaded depth file retains the full resolution. Strand-specific depths are not computed.')
-                per_sample(reference, coverage_plots)
             with report.add_section('Consensus and masking', 'Consensus'):
                 per_sample(reference, consensus_table)
             if settings.get('run_annotation'):
@@ -271,6 +271,12 @@ def render(samples, settings, output):
                            'Annotation uses the normalized VCF, including records that are not PASS; '
                            'variant statistics above use the same full normalized VCF.')
                     per_sample(reference, annotation_table)
+        with report.add_section('Genome coverage', 'Depth'):
+            html.p('Read depth after alignment filtering: relative to the reference in reference mode, '
+                   'or to the Flye contigs in de novo mode. Percentages use assessed positions; '
+                   'Plots show mean depth in at most 500 bins per reference, for up to 20 longest references. '
+                   'Total, forward and reverse read depths are shown. Depth files retain full resolution. ')
+            per_sample(samples, coverage_plots)
         with report.add_section('Basecalling and Clair3 models', 'Models'):
             html.p('The basecalling model describes the existing reads. This workflow does not run basecalling.')
             per_sample(samples, model_table)

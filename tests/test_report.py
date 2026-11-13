@@ -26,9 +26,17 @@ class ReportTests(unittest.TestCase):
             text=(p/'wf-virus-longread-report.html').read_text()
             self.assertTrue('model&lt;a&gt;' in text)
             self.assertTrue('--meta &lt;test&gt;' in text)
+            self.assertTrue('Assembly summary statistics' in text)
+            self.assertTrue('Genome coverage' in text)
+            self.assertFalse('Read summary' in text)  # No histogram input in this fixture.
+            self.assertFalse('Variant calling' in text)
+            self.assertFalse('Variant annotations' in text)
+            self.assertEqual(json.loads((p/'results.json').read_text())['samples'][0]['sample'],'sample1')
+            row['reads']['histograms']={'length':[[1000,1001,1]], 'quality':[[40,40.1,1]]}
+            report.aggregate([row],{'effective_min_read_length':1000},p)
+            text=(p/'wf-virus-longread-report.html').read_text()
             self.assertTrue('De novo minimum read length: 1000 bp.' in text)
             self.assertTrue('Fastcat histograms and retained read counts describe reads that passed the filter.' in text)
-            self.assertEqual(json.loads((p/'results.json').read_text())['samples'][0]['sample'],'sample1')
 
     def test_reference_optional_mask(self):
         with tempfile.TemporaryDirectory() as d:

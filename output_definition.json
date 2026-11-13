@@ -247,6 +247,54 @@
       "mime-type": "inode/directory",
       "optional": false,
       "type": "aggregated"
+    },
+    "reference-fwd-depth": {
+      "filepath": "{{ alias }}/alignment/{{ alias }}.fwd.depth",
+      "title": "Reference fwd depth",
+      "description": "Per-position depth used by the genome coverage report.",
+      "mime-type": "text/tab-separated-values",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "reference-rev-depth": {
+      "filepath": "{{ alias }}/alignment/{{ alias }}.rev.depth",
+      "title": "Reference rev depth",
+      "description": "Per-position depth used by the genome coverage report.",
+      "mime-type": "text/tab-separated-values",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "denovo-total-depth": {
+      "filepath": "{{ alias }}/coverage/{{ alias }}.depth",
+      "title": "Denovo total depth",
+      "description": "Per-position depth used by the genome coverage report.",
+      "mime-type": "text/tab-separated-values",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "denovo-fwd-depth": {
+      "filepath": "{{ alias }}/coverage/{{ alias }}.fwd.depth",
+      "title": "Denovo fwd depth",
+      "description": "Per-position depth used by the genome coverage report.",
+      "mime-type": "text/tab-separated-values",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "denovo-rev-depth": {
+      "filepath": "{{ alias }}/coverage/{{ alias }}.rev.depth",
+      "title": "Denovo rev depth",
+      "description": "Per-position depth used by the genome coverage report.",
+      "mime-type": "text/tab-separated-values",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "coverage-folder": {
+      "filepath": "{{ alias }}/coverage",
+      "title": "De novo coverage files",
+      "description": "Read depth against Flye contigs: total, forward and reverse.",
+      "mime-type": "inode/directory",
+      "optional": true,
+      "type": "per-sample"
     }
   }
 }

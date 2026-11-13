@@ -11,6 +11,20 @@ import report
 
 
 class MetricsTests(unittest.TestCase):
+    def test_strand_depth_and_denovo_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for suffix, depths in [('', [0,30,50]), ('.fwd', [0,10,20]), ('.rev', [0,20,30])]:
+                (root / f's{suffix}.depth').write_text(''.join(
+                    f'contig1\t{i+1}\t{depth}\n' for i, depth in enumerate(depths)))
+            row = report.coverage_with_strands(root, 's')[0]
+            self.assertEqual(row['plot'][2], {'position':3.0,'depth':50.0,'fwd':20.0,'rev':30.0})
+            fasta=root/'s.fa'; fasta.write_text('>contig1\nACG\n')
+            meta=root/'meta.json'; meta.write_text('{"selected":null}')
+            sample=report.sample_summary('s','denovo',meta,fasta,coverage=root)
+            self.assertEqual(sample['files']['Depth'],'s/coverage/s.depth')
+            self.assertEqual(sample['files']['fwd depth'],'s/coverage/s.fwd.depth')
+
     def test_depth_zero_positions_contigs_and_bounded_plot(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'depth'
@@ -80,6 +94,10 @@ class MetricsTests(unittest.TestCase):
                 self.assertTrue(marker in text, marker)
             self.assertTrue('Custom wf-virus-longread workflow maintained by klvsjeju.' in text)
             self.assertFalse('workflow provided by Oxford Nanopore Technologies.' in text)
+            self.assertTrue('Read summary' in text)
+            self.assertFalse('Assembly summary statistics' in text)
+            report.aggregate([sample], {'run_annotation': False, 'reference_based_assembly':True}, root)
+            self.assertFalse('Variant annotations' in (root/'wf-virus-longread-report.html').read_text())
             report.aggregate([], {'missing_samples': [{'barcode':'barcode03', 'alias':'Missing_Patient'}]}, root)
             self.assertIn('Missing_Patient', (root / 'wf-virus-longread-report.html').read_text())
             self.assertEqual(json.loads((root / 'results.json').read_text())['samples'], [])

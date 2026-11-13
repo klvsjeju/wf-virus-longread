@@ -16,7 +16,7 @@ secondary="$(samtools view -c -f 0x100 "$bam")"
 supplementary="$(samtools view -c -f 0x800 "$bam")"
 printf 'alignment_type\tcount\nsecondary\t%s\nsupplementary\t%s\n' "$secondary" "$supplementary" > result/alignment/filter_check.tsv
 test "$secondary" = 0 && test "$supplementary" = 0
-python3 "$OPTIONS_RUNNER" depth "$MASK_DEPTH_OPTS_B64" -- samtools depth -aa -J "$bam" > "result/alignment/${SAMPLE}.depth"
+bash "$(dirname "$OPTIONS_RUNNER")/report_depth.sh" "$bam" "$SAMPLE" result/alignment "$MASK_DEPTH_OPTS_B64"
 bcftools norm -f "$REF" -m -any "result/clair3/${SAMPLE}_merge_output.vcf.gz" | bcftools sort -Oz -o "result/clair3/${SAMPLE}_norm.vcf.gz"
 bcftools index -f "result/clair3/${SAMPLE}_norm.vcf.gz"
 bcftools view -f PASS "result/clair3/${SAMPLE}_norm.vcf.gz" -Oz -o "result/clair3/${SAMPLE}_norm.pass.vcf.gz"

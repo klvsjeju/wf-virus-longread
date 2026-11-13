@@ -194,18 +194,37 @@ process DE_NOVO_CONTIGS {
  """
 }
 
+process DE_NOVO_COVERAGE {
+ label 'wf_bacterial'
+ tag { sample }
+ publishDir { "${params.out_dir}/${sample}" }, mode: 'copy'
+ input:
+ tuple val(sample), path(reads), path(metadata), path(contigs), path(flye)
+ output:
+ tuple val(sample), path('coverage')
+ script:
+ """
+ cp '${contigs}' assembly.fa
+ mini_align -i '${reads}' -r assembly.fa -p mapped -t ${task.cpus} -m
+ samtools view -b -F 0x904 -q ${params.min_mapq} -o reporting.bam mapped.bam
+ samtools index reporting.bam
+ export OPTIONS_RUNNER='${projectDir}/bin/run_options.py'
+ bash '${projectDir}/bin/report_depth.sh' reporting.bam '${sample}' coverage
+ """
+}
+
 process SAMPLE_SUMMARY {
  label 'wf_common'
  tag { sample }
  input:
- tuple val(sample), path(metadata), path(qc), path(analysis, stageAs: 'analysis/*'), path(stats), path(flye)
+ tuple val(sample), path(metadata), path(qc), path(analysis, stageAs: 'analysis/*'), path(stats), path(flye), path(coverage)
  output:
  path 'summary.json'
  script:
  def mode = params.reference_based_assembly ? 'reference' : 'denovo'
  def analysis_path = params.reference_based_assembly ? 'analysis' : analysis
  """
- python3 '${projectDir}/bin/report.py' sample '${sample}' '${mode}' '${metadata}' '${analysis_path}' --stats '${stats}' --flye '${flye}' --mask-depth ${params.mask_depth}
+ python3 '${projectDir}/bin/report.py' sample '${sample}' '${mode}' '${metadata}' '${analysis_path}' --stats '${stats}' --flye '${flye}' --coverage '${coverage}' --mask-depth ${params.mask_depth}
  """
 }
 
@@ -327,7 +346,7 @@ workflow {
    CALL_CLAIR3(ALIGN_READS.out.join(sample_models), INDEX_REFERENCE.out)
    REFERENCE_ANALYSIS(ALIGN_READS.out.join(BAM_COVERAGE.out).join(CALL_CLAIR3.out), INDEX_REFERENCE.out)
    // Reference mode has no Flye directory; use an existing inert file for the path input.
-   analysis_results = REFERENCE_ANALYSIS.out.results.map { sample, result -> tuple(sample, result, file("${projectDir}/model_map.tsv")) }
+   analysis_results = REFERENCE_ANALYSIS.out.results.map { sample, result -> tuple(sample, result, file("${projectDir}/model_map.tsv"), file("${projectDir}/clair3_model_catalog.json")) }
    if (params.run_annotation) {
      def config = file(params.snpeff_config, checkIfExists: true)
      def data = file(params.snpeff_data, checkIfExists: true)
@@ -337,14 +356,15 @@ workflow {
        tuple(sample, result.find { it.name == 'clair3' }.resolve("${sample}_norm.vcf.gz"))
      }, config, data)
      SNPSIFT_TABLE(REFERENCE_ANALYSIS.out.results.join(SNPEFF_ANNOTATE.out))
-     analysis_results = SNPSIFT_TABLE.out.results.map { sample, result -> tuple(sample, result, file("${projectDir}/model_map.tsv")) }
+     analysis_results = SNPSIFT_TABLE.out.results.map { sample, result -> tuple(sample, result, file("${projectDir}/model_map.tsv"), file("${projectDir}/clair3_model_catalog.json")) }
    }
  } else {
    DE_NOVO_CONTIGS(INGEST.out.reads)
-   analysis_results = DE_NOVO_CONTIGS.out
+   DE_NOVO_COVERAGE(INGEST.out.reads.join(DE_NOVO_CONTIGS.out))
+   analysis_results = DE_NOVO_CONTIGS.out.join(DE_NOVO_COVERAGE.out)
  }
  metadata_results = INGEST.out.reads.map { sample, reads, metadata -> tuple(sample, metadata) }
  SAMPLE_SUMMARY(metadata_results.join(QC.out).join(analysis_results).join(INGEST.out.stats)
-   .map { sample, metadata, qc, analysis, flye, stats -> tuple(sample, metadata, qc, analysis, stats, flye) })
+   .map { sample, metadata, qc, analysis, flye, coverage, stats -> tuple(sample, metadata, qc, analysis, stats, flye, coverage) })
  WORKFLOW_REPORT(SAMPLE_SUMMARY.out.toList(), missing_samples, sample_details)
 }

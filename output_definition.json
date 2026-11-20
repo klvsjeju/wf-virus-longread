@@ -295,6 +295,22 @@
       "mime-type": "inode/directory",
       "optional": true,
       "type": "per-sample"
+    },
+    "annotation-provenance": {
+      "filepath": "{{ alias }}/annot/annotation_provenance.json",
+      "title": "Annotation database provenance",
+      "description": "Database identity, reference/GFF hashes, structural validation and independent-check status.",
+      "mime-type": "application/json",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "annotation-database-folder": {
+      "filepath": "annotation_database",
+      "title": "Annotation database resources",
+      "description": "Prepared snpEff resources and default database cache.",
+      "mime-type": "inode/directory",
+      "optional": true,
+      "type": "aggregated"
     }
   }
 }

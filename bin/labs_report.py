@@ -153,6 +153,17 @@ def annotation_table(sample):
     if data is None:
         html.p('No annotation output is available for this sample.')
         return
+    database = sample.get('annotation_database')
+    if database:
+        validation = database.get('validation', {})
+        table([{'Database': database.get('db_id','-'), 'Mode': database.get('mode','-'),
+                'snpEff version': database.get('tool_version','-'),
+                'Cache reused': database.get('cache_reused','-'),
+                'Independent CDS check': validation.get('independent_cds_check',False),
+                'Independent protein check': validation.get('independent_protein_check',False)}])
+        html.p(validation.get('identity_note',''))
+        if validation.get('normalization'):
+            html.p(f"Created {len(validation['normalization'])} transcript links for directly gene-parented CDS features. Details are recorded in annotation provenance.")
     html.p(f"Annotated VCF records: {data['records']}. Impact and effect counts include "
            'each distinct value once per record; one record can have multiple effects.')
     with Grid(columns=2):

@@ -161,6 +161,10 @@ def sample_summary(sample, mode, metadata, analysis, stats=None, flye=None, mask
         extra['variants'] = variant_summary(analysis / 'clair3/variants.stats')
         extra['variant_statistics_source'] = f'{sample}_norm.vcf.gz'
         extra['annotations'] = annotations_summary(analysis / 'annot/var.tsv')
+        provenance = analysis / 'annot/annotation_provenance.json'
+        if provenance.exists():
+            extra['annotation_database'] = json.loads(provenance.read_text())
+            links['Annotation database provenance'] = f'{sample}/annot/annotation_provenance.json'
         if extra['annotations'] is not None:
             links['Annotations'] = f'{prefix}/annot/var.tsv'
             links['Annotated VCF'] = f'{prefix}/annot/{sample}_annot.vcf'

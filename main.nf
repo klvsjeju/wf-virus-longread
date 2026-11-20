@@ -143,18 +143,34 @@ process REFERENCE_ANALYSIS {
  """
 }
 
+process PREPARE_SNPEFF_DB {
+ label 'snpeff'
+ publishDir { "${params.out_dir}/annotation_database" }, mode: 'copy', pattern: 'prepared_db'
+ input:
+ path reference, stageAs: 'reference.fa'
+ path gff, stageAs: 'annotation.gff'
+ path cache_root, stageAs: 'db_cache'
+ output:
+ path 'prepared_db'
+ script:
+ def gff_arg = params.annotation_gff ? "--gff '${gff}'" : ''
+ """
+ python3 '${projectDir}/bin/snpeff_db.py' --reference '${reference}' ${gff_arg} --cache '${cache_root}' --output prepared_db
+ """
+}
+
 process SNPEFF_ANNOTATE {
  label 'snpeff'
  tag { sample }
  input:
  tuple val(sample), path(variants)
- path config, stageAs: 'snpEff.config'
- path data, stageAs: 'snpeff_data'
+ tuple path(config, stageAs: 'snpEff.config'), path(data, stageAs: 'snpeff_data'), val(db_id), val(provenance_b64)
  output:
- tuple val(sample), path('annot.vcf')
+ tuple val(sample), path('annot.vcf'), path('annotation_provenance.json')
  script:
  """
- snpEff ann -c snpEff.config -dataDir "\$PWD/snpeff_data" -ud 0 -no-intergenic '${params.snpeff_db}' '${variants}' > annot.vcf
+ snpEff ann -c snpEff.config -dataDir "\$PWD/snpeff_data" -ud 0 -no-intergenic '${db_id}' '${variants}' > annot.vcf
+ printf '%s' '${provenance_b64}' | base64 -d > annotation_provenance.json
  """
 }
 
@@ -164,13 +180,14 @@ process SNPSIFT_TABLE {
  publishDir { "${params.out_dir}/${sample}" }, mode: 'copy',
    saveAs: { name -> name == 'result' ? null : name.replaceFirst(/^result\//, '') }
  input:
- tuple val(sample), path(source, stageAs: 'source_result/*'), path(annotated)
+ tuple val(sample), path(source, stageAs: 'source_result/*'), path(annotated), path(annotation_provenance)
  output:
  tuple val(sample), path('result/*', type: 'any'), emit: results
  script:
  """
  cp -aL --reflink=auto source_result result
  mkdir -p result/annot
+ cp '${annotation_provenance}' result/annot/annotation_provenance.json
  cp '${annotated}' 'result/annot/${sample}_annot.vcf'
  SnpSift extractFields -s ';' -e '.' 'result/annot/${sample}_annot.vcf' POS REF ALT \
    'ANN[*].GENE' 'ANN[*].IMPACT' 'ANN[*].EFFECT' 'GEN[0].GT' 'GEN[0].DP' 'GEN[0].AF' 'ANN[*].HGVS_C' 'ANN[*].HGVS_P' | \
@@ -244,7 +261,7 @@ process WORKFLOW_REPORT {
    sample_metadata: sample_details,
    run_name: workflow.runName, session_id: workflow.sessionId.toString(),
    reference_based_assembly: params.reference_based_assembly, reference: params.reference,
-   run_annotation: params.run_annotation,
+   run_annotation: params.run_annotation, annotation_gff: params.annotation_gff, snpeff_cache: params.snpeff_cache,
    min_mapq: params.min_mapq, min_coverage: params.min_coverage,
    mask_depth: params.mask_depth, mask_depth_opts: params.mask_depth_opts,
    consensus_opts: params.consensus_opts, flye_opts: params.flye_opts,
@@ -320,10 +337,6 @@ workflow {
  def analysis_results
  if (params.reference_based_assembly) {
    ['reference'].each { k -> if (!params[k]) error "Reference mode requires --${k}" }
-   if (params.run_annotation) {
-     ['snpeff_config','snpeff_data','snpeff_db'].each { k -> if (!params[k]) error "Annotation requires --${k}" }
-     if (!(params.snpeff_db ==~ /[A-Za-z0-9_.-]+/)) error 'Invalid snpEff database ID'
-   }
    def ref = file(params.reference, checkIfExists: true)
    if (params.model_map && !params.model_dir) error '--model_map requires --model_dir; leave both unset for automatic models'
    def models = file(params.model_dir ?: "${projectDir}/model_map.tsv", checkIfExists: true)
@@ -348,13 +361,35 @@ workflow {
    // Reference mode has no Flye directory; use an existing inert file for the path input.
    analysis_results = REFERENCE_ANALYSIS.out.results.map { sample, result -> tuple(sample, result, file("${projectDir}/model_map.tsv"), file("${projectDir}/clair3_model_catalog.json")) }
    if (params.run_annotation) {
-     def config = file(params.snpeff_config, checkIfExists: true)
-     def data = file(params.snpeff_data, checkIfExists: true)
-     if (!data.isDirectory()) error 'snpeff_data must be a directory'
-     if (!file("${data}/${params.snpeff_db}/snpEffectPredictor.bin").exists()) error 'snpEff DB binary not found'
+     def resources
+     if (params.snpeff_config || params.snpeff_data || params.snpeff_db) {
+       ['snpeff_config','snpeff_data','snpeff_db'].each { k -> if (!params[k]) error "Legacy annotation requires all three snpeff_config, snpeff_data, snpeff_db parameters" }
+       if (params.annotation_gff) error 'Choose annotation_gff automatic mode or legacy snpEff resources, not both'
+       if (!(params.snpeff_db ==~ /[A-Za-z0-9_.-]+/)) error 'Invalid snpEff database ID'
+       def config = file(params.snpeff_config, checkIfExists: true)
+       def data = file(params.snpeff_data, checkIfExists: true)
+       if (!data.isDirectory() || !file("${data}/${params.snpeff_db}/snpEffectPredictor.bin").exists()) error 'Legacy snpEff DB binary not found'
+       def metadata = [mode:'legacy_manual', db_id:params.snpeff_db,
+         validation:[identity_note:'Legacy manually selected database; reference sequence identity has not been automatically verified.', independent_cds_check:false, independent_protein_check:false]]
+       def encoded = groovy.json.JsonOutput.toJson(metadata).bytes.encodeBase64().toString()
+       resources = Channel.value(tuple(config, data, params.snpeff_db, encoded))
+     } else {
+       def gff = file(params.annotation_gff ?: "${projectDir}/model_map.tsv", checkIfExists:true)
+       if (params.annotation_gff && !gff.isFile()) error 'annotation_gff must be a GFF3 file'
+       def cache = file(params.snpeff_cache ?: "${params.out_dir}/annotation_database")
+       if (!cache.exists()) cache.mkdirs()
+       if (!cache.isDirectory()) error 'snpeff_cache must be a writable directory'
+       PREPARE_SNPEFF_DB(ref, gff, cache)
+       // Static preparation inputs produce a value channel shared by all samples.
+       resources = PREPARE_SNPEFF_DB.out.map { bundle ->
+         def metadata = new groovy.json.JsonSlurper().parseText(bundle.resolve('metadata.json').text)
+         tuple(bundle.resolve('snpEff.config'), bundle.resolve('data'), metadata.db_id,
+           groovy.json.JsonOutput.toJson(metadata).bytes.encodeBase64().toString())
+       }
+     }
      SNPEFF_ANNOTATE(REFERENCE_ANALYSIS.out.results.map { sample, result ->
        tuple(sample, result.find { it.name == 'clair3' }.resolve("${sample}_norm.vcf.gz"))
-     }, config, data)
+     }, resources)
      SNPSIFT_TABLE(REFERENCE_ANALYSIS.out.results.join(SNPEFF_ANNOTATE.out))
      analysis_results = SNPSIFT_TABLE.out.results.map { sample, result -> tuple(sample, result, file("${projectDir}/model_map.tsv"), file("${projectDir}/clair3_model_catalog.json")) }
    }

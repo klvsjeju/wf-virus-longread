@@ -31,7 +31,7 @@ Select **Run locally**, choose a FASTQ file or folder, and configure the analysi
 1. Leave **Reference-based assembly** disabled for de novo contigs, or enable it and select an uncompressed reference FASTA.
 2. Optionally provide a sample sheet or sample name.
 3. Adjust the advanced options as needed. The minimum read length defaults to 1,000 bp for de novo analysis.
-4. Enable reference annotation only when a matching snpEff database is available.
+4. To annotate reference variants, enable annotation and select a matching GFF3. An optional database folder can be selected for reuse.
 5. Start the analysis and inspect the report, files and logs in EPI2ME.
 
 ### Command line
@@ -118,15 +118,30 @@ Bcftools normalizes the merged calls and extracts PASS records. The full normali
 
 When `run_annotation` is enabled, snpEff annotates the **full normalized VCF**, including non-PASS records. SnpSift extracts a TSV with positions, alleles, genes, effects, impacts, genotype, depth, allele fraction and HGVS fields.
 
-Provide all three annotation settings:
+The alignment reference FASTA is reused automatically. In EPI2ME, choose:
 
 | Setting | Select or enter |
 | --- | --- |
-| `snpeff_config` | The `snpEff.config` file that defines the database. |
-| `snpeff_data` | The database root directory containing `<snpeff_db>/snpEffectPredictor.bin`. |
-| `snpeff_db` | The database identifier used in the configuration and data subfolder. |
+| `annotation_gff` | An uncompressed GFF3 for the selected reference. Required for a new DB; optional when a unique matching verified DB already exists. |
+| `snpeff_cache` | Optional writable annotation database folder. Defaults to `<out_dir>/annotation_database`. |
 
-The database must match the reference coordinates and contig names. Annotation is optional and is not run in de novo mode.
+The workflow creates the snpEff configuration, database ID and data folders automatically. A prepared copy is published under `annotation_database/prepared_db/`; cached databases use `wfvirus_<hash>` folders. To reuse a DB in a new analysis, select the same database folder and omit the GFF, or select the same GFF to identify the intended annotation version. Multiple matching GFF versions are not resolved by arbitrarily choosing the newest file.
+
+```bash
+nextflow run . -profile standard \
+  --fastq /path/to/reads --reference_based_assembly \
+  --reference /path/to/reference.fa --run_annotation \
+  --annotation_gff /path/to/reference.gff3 \
+  --snpeff_cache /path/to/annotation_database --out_dir output
+```
+
+Sequence IDs are compared exactly, including accession version suffixes. For example, `AB097933.1` is not automatically renamed to `AB097933`. Coordinates, CDS strand/phase, feature IDs, Parent links and parent bounds are checked. Gene and transcript IDs/Parent links must be present; valid directly gene-parented CDS features receive generated transcript links, recorded in provenance. Embedded FASTA records, if supplied in GFF, are compared with the selected reference. The original inputs are not modified.
+
+Names and coordinate consistency do not independently prove that a GFF without embedded sequence originated from the same genome. GFF-only builds skip comparison against independently supplied CDS/protein FASTA (`-noCheckCds -noCheckProtein`); that limitation is recorded, not reported as a passed independent validation. The automatic mode uses the Standard genetic code and rejects a declared non-standard `transl_table`.
+
+Cache reuse requires matching reference sequence/ID hashes, GFF identity when provided, snpEff version and preparation policy. Stored resource hashes are checked before reuse. Incomplete or changed cache bundles cause an error instead of being silently overwritten. Raw legacy databases without workflow provenance are not auto-selected. Legacy `snpeff_config`, `snpeff_data`, `snpeff_db` remain CLI-only and must be supplied together, without `annotation_gff`; their reference identity is explicitly marked unverified.
+
+Annotation is optional and is not run in de novo mode. The annotated VCF and TSV remain under `<sample>/annot/`, with `annotation_provenance.json` recording database identity, validation, normalization, tool version and cache reuse. The report displays the provenance summary. This mode builds from local FASTA+GFF and does not download annotations from an accession.
 
 ## Main options
 
@@ -146,6 +161,8 @@ EPI2ME groups the launch settings into Input options, Sample options, Advanced o
 | `min_coverage` | `30` | Clair3 minimum coverage. |
 | `mask_depth` | `0` | Mask positions below this depth in the reference consensus; `0` disables the mask. |
 | `run_annotation` | `false` | Enable snpEff and SnpSift in reference mode. |
+| `annotation_gff` | Unset | Matching GFF3 for automatic DB construction. |
+| `snpeff_cache` | Automatic | Writable DB folder; defaults to `<out_dir>/annotation_database`. |
 | `threads` | `4` | Threads allocated per task. |
 | `out_dir` | Automatic | Output root; see the folder layout below. |
 
@@ -190,6 +207,7 @@ All per-sample results are grouped directly under `<out_dir>/<sample>/`:
 │   └── metadata/
 │       ├── basecaller.json
 │       └── fastcat_stats/
+├── annotation_database/      # Automatic snpEff DB cache and prepared resources
 ├── wf-virus-longread-report.html
 ├── results.json
 └── execution/
@@ -243,6 +261,6 @@ Keep the output directory structure intact when moving results so relative repor
 - **No reads remain after length filtering:** lower `min_read_length` or set it to `0` for de novo analysis.
 - **The basecaller is unknown:** inspect the FASTQ header and `<sample>/metadata/basecaller.json`, or select the model that was actually used.
 - **Clair3 model preparation fails:** check model support and network access, or supply compatible custom CLI checkpoints. No approximate automatic model fallback is used.
-- **Annotation fails:** confirm that `snpeff_config`, `snpeff_data` and `snpeff_db` refer to the same database and match the reference.
+- **Annotation DB preparation fails:** check exact FASTA/GFF IDs (including versions), GFF coordinates, CDS phase and Parent links. Provide the intended GFF when no unique verified cache exists. Inspect the task log and `snpeff_build_failed.log` for build failures.
 
 The shared input handling and report structure were adapted with reference to [wf-bacterial-genomes](https://github.com/epi2me-labs/wf-bacterial-genomes). This viral workflow uses Clair3 and snpEff and does not include the bacterial workflow's MLST, AMR, species identification or plasmid analyses. Implementation and execution checks are recorded in [VALIDATION.txt](VALIDATION.txt).

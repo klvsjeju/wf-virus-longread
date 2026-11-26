@@ -57,7 +57,7 @@ def reference_hash(sequences):
     return digest.hexdigest()
 
 
-def attributes(text):
+def attributes(text, audit=None, line=None):
     result = {}
     if text == '.':
         return result
@@ -68,14 +68,22 @@ def attributes(text):
             raise ValueError('GFF3 attributes must use key=value syntax')
         key, value = item.split('=', 1)
         if key in result:
-            raise ValueError(f'Duplicate GFF3 attribute {key}')
-        result[key] = value
+            if key in {'ID', 'Parent', 'Derives_from', 'transl_table', 'codon_start'}:
+                raise ValueError(f'Duplicate GFF3 structural attribute {key}')
+            # Retain each raw, percent-encoded annotation value as a GFF list.
+            # Do not decode/re-encode here: encoded commas/semicolons are data.
+            result[key] += ',' + value
+            if audit is not None:
+                audit.append(f'Line {line}: merged repeated descriptive attribute {key}')
+        else:
+            result[key] = value
     return result
 
 
 def validate_gff(path, sequences):
     """Check IDs/coordinates/parentage. Only infer direct gene->CDS transcripts."""
     rows, comments, identities, embedded = [], [], {}, []
+    attribute_audit = []
     in_fasta = False
     for number, raw in enumerate(Path(path).read_text().splitlines(), 1):
         if raw == '##FASTA':
@@ -112,7 +120,10 @@ def validate_gff(path, sequences):
             raise ValueError(f'GFF line {number}: invalid strand')
         if kind == 'CDS' and (strand not in ('+', '-') or phase not in ('0', '1', '2')):
             raise ValueError(f'GFF line {number}: CDS requires +/- strand and phase 0, 1 or 2')
-        attrs = attributes(attrs)
+        try:
+            attrs = attributes(attrs, attribute_audit, number)
+        except ValueError as error:
+            raise ValueError(f'GFF line {number}: {error}') from error
         if kind == 'CDS' and unquote(attrs.get('transl_table','1')) != '1':
             raise ValueError(f'GFF line {number}: automatic mode uses the Standard genetic code; non-standard transl_table requires a separately configured database')
         row = {'fields': fields, 'attrs': attrs, 'start': lo, 'end': hi, 'line': number}
@@ -188,6 +199,7 @@ def validate_gff(path, sequences):
         'features': dict(Counter(row['fields'][2] for row in ordered)),
         'unannotated_sequences': sorted(set(sequences) - {row['fields'][0] for row in rows}),
         'normalization': changes,
+        'attribute_normalization': attribute_audit,
         'checks': ['exact sequence IDs including versions', 'reference coordinate bounds',
                    'CDS strand and phase', 'feature IDs and Parent links', 'parent bounds and strands'],
         'embedded_fasta_checked': bool(embedded),

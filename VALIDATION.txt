@@ -158,3 +158,44 @@ Automatic local GFF3 snpEff databases (2026-11-20, version retained at 0.3.3):
 - Actual snpEff 5.4c container built a tiny reference/GFF DB, reused it without the GFF and produced the expected missense effect. Actual Nextflow 23.04.2/public-container runs completed Dumas GFF automatic DB construction, a GFF-free cache-only run and a two-sample run sharing that DB. Confirmed all samples were annotated, cache-reuse flags were correct, reference length was 124884, and all report links/provenance files existed.
 - All 32 Python tests passed in the actual wf-common image with EZCHARTS_DEBUG=1. Tests cover ID/version mismatch, out-of-range features, invalid phase/Parents, embedded-sequence mismatch, duplicate FASTA IDs, cache integrity/version/ambiguity and UI fields. Local tests passed with two rendering tests skipped; Python syntax, schema parsing and git diff --check passed.
 - Existing pOka FASTA uses AB097933.1 while pOka.gff uses AB097933. The validator rejects this mismatch. Original pOka files were inspected read-only and not modified. Windows filesystem cache behavior and EPI2ME form rendering were not separately exercised for this update.
+
+Repeated descriptive GFF attributes (2026-11-20, workflow version unchanged):
+- GFF attributes now preserve repeated descriptive values (including note, db_xref and function) as comma-separated raw encoded values. Percent-encoded commas/semicolons are preserved. Duplicate structural ID/Parent/Derives_from/codon_start/transl_table attributes remain errors.
+- Added line-numbered diagnostics and separate attribute-normalization provenance, displayed separately from inferred transcript links.
+- 34 local Python tests passed (two container-rendering tests skipped); new regression checks cover retained repeated values, structural duplicates and normalization provenance. git diff --check passed.
+- Inspected the failed EPI2ME task's original pOka GFF read-only. Repeated descriptive attributes no longer trigger the reported error, but validation next identifies line 8: gene requires an ID. This exported GFF still needs structural normalization before it can build a valid database. Original input and installed workflow files were not edited.
+
+Default QUAL/sample-depth variant selection (2026-11-24, version retained at 0.3.3):
+- Added min_variant_qual=20 and min_variant_depth=30 to config, Advanced schema, integer validation and report settings. Reference postprocessing selects existing PASS records with inclusive QUAL and sample FORMAT/DP thresholds; missing values are excluded.
+- Full normalized VCF, report statistics and annotation inputs remain before this selection. Consensus uses the selected norm.pass VCF. Clair3 min_coverage remains a separate caller setting.
+- Actual local bcftools integration checked QUAL 20 vs 19.99, DP 30 vs 29, missing QUAL/DP, caller LowQual exclusion, higher custom thresholds and preservation of all normalized input records. Python suite: 35 discovered, 33 passed, 2 renderer tests skipped. Bash syntax and git diff --check passed. Full Nextflow/public-image execution was not rerun for this change.
+
+Consensus VCF rename (2026-11-24, version retained at 0.3.3):
+- User renamed the filtered consensus-input VCF from <sample>_norm.pass.vcf.gz to <sample>_norm.cons.vcf.gz in creation/indexing/consensus and output definitions. Updated remaining report link, README and test expectations. Earlier validation entries describe the filenames used at that time.
+
+Variant output folder rename (2026-11-24, version retained at 0.3.3):
+- Renamed caller/postprocessing/published folder clair3 to varcalling, including annotation input lookup, report paths, output definitions and fixtures. Clair3 tool/container labels and checkpoint names are unchanged.
+- New outputs use <out_dir>/<sample>/varcalling/ and the filtered consensus VCF is <sample>_norm.cons.vcf.gz. Existing analysis folders are not migrated.
+- Python suite: 35 discovered, 33 passed, 2 renderer tests skipped, including actual bcftools filter integration. Bash syntax and git diff --check passed. Full Nextflow/public-container analysis was not rerun for this path change.
+
+Two-stage QUAL/DP then consensus AF selection (2026-11-24, version retained at 0.3.3):
+- Supersedes the preceding pre-filter-statistics behavior: norm.vcf.gz now contains normalized records with inclusive QUAL >=20 and sample FORMAT/DP >=30 by default, regardless of caller FILTER status. Reports and annotation use this QUAL/DP-selected VCF.
+- norm.cons.vcf.gz additionally requires caller PASS and inclusive FORMAT/AF >=0.5. Added configurable min_variant_af=0.5, schema range 0..1, runtime validation and report parameter recording. Missing required values fail selection. Original merged caller VCF remains unchanged.
+- Actual local bcftools exercised production normalization/filter/index commands: QUAL 20/19.99, DP 30/29, AF 0.5/0.4999, missing QUAL/DP/AF, qualifying LowQual in norm but not cons, custom thresholds, and raw input preservation. Python suite: 35 discovered, 33 passed, 2 renderer tests skipped. Bash syntax and git diff --check passed. Full Nextflow/public-container run was not rerun.
+
+Annotation Excel workbook (2026-11-24, version retained at 0.3.3):
+- Added ANNOTATION_WORKBOOK in existing wf_common image after SnpSift; annotated results are published after workbook completion. Existing TSV/VCF/provenance outputs are retained.
+- Standard-library annotation_workbook.py generates annot/var.xlsx with SNPs, Indels and Other variants sheets, frozen headers and filters. All TSV columns/rows are preserved as literal strings. Nonsequence/multiallelic/symbolic/equal-length multibase records go to Other; unequal sequence-allele lengths go to Indels. Excel row/cell limits fail explicitly instead of truncating.
+- Added output definition and report link. Tests exercise classification, exact row retention, literal formula-like values, XML escaping, unchanged source TSV and empty annotation sheets. Python suite: 37 discovered, 35 passed, 2 rendering tests skipped. XLSX XML/package checks and git diff --check passed. Excel GUI and full Nextflow/public-container run were not exercised for this change.
+
+Report simplification and actual tool versions (2026-11-24, version retained at 0.3.3):
+- Removed Environment/Image table and container settings from HTML workflow parameter display. Execution identifiers/links remain; container provenance remains in results.json.
+- Added TOOL_VERSIONS task per used image, collecting fastcat/bgzip, mapping/samtools/bcftools, NanoPlot, mode-specific Flye or Clair3/bamCoverage, and optional snpEff/SnpSift/Java. Report includes Nextflow and report Python/package versions. Unused tools are explicitly marked; failed probes are not replaced by guessed tags. mini_align does not expose a version and is labelled an unversioned alignment wrapper.
+- Actual EPI2ME Docker version probes detected fastcat 0.24.2, bgzip/htslib 1.21, minimap2 2.28-r1209, samtools 1.22.1, bcftools 1.22, Flye 2.9.5-b1801, Clair3 1.2.0, snpEff 5.4c, SnpSift 5.2, NanoPlot 1.43.0, bamCoverage 3.5.5 and Java 25.0.2-internal. Quoted Java/bgzip output formats were corrected and checked with matching fixtures.
+- Annotation section now displays only the complete searchable/paginated annotation table, with no 500-row cutoff or impact/effect/provenance summary. TSV/XLSX/provenance downloads remain under Result files. Added missing annotation workbook report link.
+- Actual report-image tests: 37 discovered, 36 passed, 1 bcftools integration skipped because executable absent in this image. Latest local suite including 601-row regression: 38 discovered, 36 passed, 2 rendering tests skipped; actual local bcftools test passed. Nextflow 23.04.2 previews exercised de novo and annotated reference wiring; no full biological analysis rerun for this change.
+
+Custom report header (2026-11-24, version retained at 0.3.3):
+- Applied user-provided background.png design: white header, black title, red border, crimson/red badges with dark outlines and custom circular bird logo. Logo links to workflow GitHub as explicitly requested. Report date/version remain dynamically generated by LabsReport.
+- Added report_branding.py and unmodified report_assets/header-reference.png. Logo uses a CSS viewport onto the original image; embedded data URI makes the HTML self-contained. Body analysis sections/navigation remain functional; only header theme is customized.
+- Actual report-container suite passed (38 discovered, 37 passed, 1 bcftools integration skipped). Regenerated standalone no-sample layout preview; Edge headless screenshot inspected to confirm visible logo, border, title, badges and dynamic metadata. Fixed CSS escaping identified by visual inspection. Local suite and git diff --check passed. No biological analysis rerun was needed for header styling.

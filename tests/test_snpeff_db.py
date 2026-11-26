@@ -10,6 +10,23 @@ db=importlib.util.module_from_spec(spec);spec.loader.exec_module(db)
 GFF='##gff-version 3\nNC_1.1\ttest\tgene\t1\t9\t.\t+\t.\tID=g1\nNC_1.1\ttest\tCDS\t1\t9\t.\t+\t0\tID=c1;Parent=g1\n'
 
 class SnpeffDatabaseTests(unittest.TestCase):
+    def test_repeated_descriptions_preserved_structural_duplicates_rejected(self):
+        attrs=db.attributes('ID=g1;note=first%3Bpart;note=second%2Cpart;db_xref=A;db_xref=B;function=one;function=two')
+        self.assertEqual(attrs['note'],'first%3Bpart,second%2Cpart')
+        self.assertEqual(attrs['db_xref'],'A,B')
+        self.assertEqual(attrs['function'],'one,two')
+        for key in ('ID','Parent','codon_start','transl_table','Derives_from'):
+            with self.assertRaisesRegex(ValueError,'structural attribute'):
+                db.attributes(f'{key}=a;{key}=b')
+
+    def test_description_merge_is_recorded_in_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);ref,gff=self.fixture(root)
+            gff.write_text(GFF.replace('ID=g1','ID=g1;note=first;note=second'))
+            normalized,validation=db.validate_gff(gff,db.fasta(ref))
+            self.assertIn('note=first,second',normalized)
+            self.assertEqual(len(validation['attribute_normalization']),1)
+
     def fixture(self,root):
         ref=root/'reference.fa';ref.write_text('>NC_1.1 description\nATGAAATAA\n')
         gff=root/'annotation.gff';gff.write_text(GFF)

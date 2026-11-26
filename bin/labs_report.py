@@ -21,6 +21,7 @@ from ezcharts.components.reports import labs
 from ezcharts.layout.snippets import Grid, Tabs
 from ezcharts.layout.snippets.table import DataTable
 import pandas as pd
+from report_branding import apply_branding
 from bokeh.models import Title
 
 
@@ -142,7 +143,7 @@ def consensus_table(sample):
             'Longest sequence (bp)': assembly['longest']}])
     html.p('Consensus sequences are generated from PASS variants with the selected '
            'bcftools consensus options and optional low-coverage mask. '
-           'Report variant statistics describe the full normalized VCF before PASS filtering. '
+           'Report variant statistics describe the QUAL/DP-filtered normalized VCF before consensus AF/PASS selection. '
            'Consensus uses PASS variants and can be restricted further by consensus options.')
     if 'Mask BED' in sample['files']:
         html.a('Download low-coverage mask BED', href=quote(sample['files']['Mask BED'], safe='/'))
@@ -153,25 +154,7 @@ def annotation_table(sample):
     if data is None:
         html.p('No annotation output is available for this sample.')
         return
-    database = sample.get('annotation_database')
-    if database:
-        validation = database.get('validation', {})
-        table([{'Database': database.get('db_id','-'), 'Mode': database.get('mode','-'),
-                'snpEff version': database.get('tool_version','-'),
-                'Cache reused': database.get('cache_reused','-'),
-                'Independent CDS check': validation.get('independent_cds_check',False),
-                'Independent protein check': validation.get('independent_protein_check',False)}])
-        html.p(validation.get('identity_note',''))
-        if validation.get('normalization'):
-            html.p(f"Created {len(validation['normalization'])} transcript links for directly gene-parented CDS features. Details are recorded in annotation provenance.")
-    html.p(f"Annotated VCF records: {data['records']}. Impact and effect counts include "
-           'each distinct value once per record; one record can have multiple effects.')
-    with Grid(columns=2):
-        table([{'Impact': key, 'Records': value} for key, value in sorted(data['impacts'].items())])
-        table([{'Effect': key, 'Records': value} for key, value in sorted(data['effects'].items())])
-    html.p(f"Showing at most the first {data['preview_limit']} records. The complete annotation table is linked below.")
     table(data['preview'])
-    html.a('Download complete annotation TSV', href=quote(sample['files']['Annotations'], safe='/'))
 
 
 def model_table(sample):
@@ -197,10 +180,21 @@ def render(samples, settings, output):
         root = Path(tmp)
         params_path = root / 'params.json'
         params_path.write_text(json.dumps({escaping.escape(str(key)): escaping.escape(str(value))
-                                          for key, value in settings.items()}, indent=2))
+                                          for key, value in settings.items()
+                                          if key not in {'containers', 'container_override', 'software_versions'}}, indent=2))
         versions_path = root / 'versions.csv'
         versions = [('wf-virus-longread', settings.get('workflow_version', 'unknown'))]
+        detected = settings.get('software_versions', {})
+        for tool in ('Nextflow', 'fastcat', 'bgzip', 'mini_align', 'minimap2', 'samtools',
+                     'bcftools', 'NanoPlot', 'Flye', 'Clair3', 'bamCoverage', 'snpEff', 'SnpSift', 'Python', 'Java'):
+            used = (tool not in {'Flye','Clair3','bamCoverage','snpEff','SnpSift','Java'} or
+                    (tool == 'Flye' and not settings.get('reference_based_assembly')) or
+                    (tool in {'Clair3','bamCoverage'} and settings.get('reference_based_assembly')) or
+                    (tool in {'snpEff','SnpSift','Java'} and settings.get('run_annotation') and settings.get('reference_based_assembly')))
+            version = settings.get('nextflow_version','Not recorded') if tool == 'Nextflow' else detected.get(tool, 'Not detected' if used else 'Not used in this run')
+            versions.append((tool, version))
         for package in ('ezcharts', 'pandas', 'bokeh'):
+
             versions.append((package, importlib.metadata.version(package)))
         with versions_path.open('w') as handle:
             csv.writer(handle).writerows(versions)
@@ -264,8 +258,8 @@ def render(samples, settings, output):
                 per_sample(denovo, assembly_table)
         if reference:
             with report.add_section('Variant calling', 'Variants'):
-                html.p('Statistics from bcftools stats on the full normalized Clair3 VCF '
-                       '(<sample>_norm.vcf.gz), before PASS filtering. PASS and non-PASS records are included. '
+                html.p('Statistics from bcftools stats on the QUAL/DP-filtered normalized Clair3 VCF '
+                       '(<sample>_norm.vcf.gz), after QUAL/DP selection and before consensus AF/PASS selection. Qualifying PASS and non-PASS records are included. '
                        'Complementary substitutions are grouped, as in the reference workflow.')
                 table([dict({'Sample': row['sample']}, **row['variants']['counts'])
                        for row in reference if row.get('variants')])
@@ -278,9 +272,6 @@ def render(samples, settings, output):
                 per_sample(reference, consensus_table)
             if settings.get('run_annotation'):
                 with report.add_section('Variant annotations', 'snpEff'):
-                    html.p('Optional snpEff variant effects using the selected reference annotation database. '
-                           'Annotation uses the normalized VCF, including records that are not PASS; '
-                           'variant statistics above use the same full normalized VCF.')
                     per_sample(reference, annotation_table)
         with report.add_section('Genome coverage', 'Depth'):
             html.p('Read depth after alignment filtering: relative to the reference in reference mode, '
@@ -294,18 +285,14 @@ def render(samples, settings, output):
         with report.add_section('Result files', 'Files'):
             per_sample(samples, file_links)
             html.p('Open files through the EPI2ME Files tab if embedded report links are restricted.')
-        with report.add_section('Execution and containers', 'Execution'):
+        with report.add_section('Execution', 'Execution'):
             table([{'Field': 'Run name', 'Value': settings.get('run_name', '-')},
                    {'Field': 'Session ID', 'Value': settings.get('session_id', '-')}])
-            html.p('Software versions lists the report runtime. The configured analysis container images '
-                   'are listed below; tags identify the analysis tool environments.')
-            table([{'Environment': key, 'Image': value} for key, value in settings.get('containers', {}).items()])
-            if settings.get('container_override'):
-                html.p('Analysis container override: ' + settings['container_override'])
             with html.ul():
                 for label, path in [('Nextflow execution report', 'execution/report.html'),
                                     ('Execution timeline', 'execution/timeline.html'), ('Task trace', 'execution/trace.tsv')]:
                     with html.li():
                         html.a(label, href=path)
             html.p('Execution reports are finalized when Nextflow exits.')
+        apply_branding(report)
         report.write(str(output / 'wf-virus-longread-report.html'))

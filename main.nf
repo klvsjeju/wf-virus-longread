@@ -109,12 +109,12 @@ process CALL_CLAIR3 {
  tuple val(sample), path(alignment), path(model_root, stageAs: 'models'), path(provenance)
  tuple path(ref), path(fai), path(mmi)
  output:
- tuple val(sample), path('clair3'), path('model_selection.json', includeInputs: true)
+ tuple val(sample), path('varcalling'), path('model_selection.json', includeInputs: true)
  script:
  """
  run_clair3.sh --bam_fn="\$PWD/${alignment}/${sample}_sorted.bam" --ref_fn="\$PWD/${ref}" \
    --model_path="\$(realpath '${model_root}')" --sample_name='${sample}' --threads=${task.cpus} \
-   --platform=ont --output="\$PWD/clair3" --chunk_size=25000 --include_all_ctgs \
+   --platform=ont --output="\$PWD/varcalling" --chunk_size=25000 --include_all_ctgs \
    --haploid_sensitive --no_phasing_for_fa --min_coverage=${params.min_coverage} \
    --enable_long_indel --remove_intermediate_dir
  """
@@ -126,16 +126,17 @@ process REFERENCE_ANALYSIS {
  publishDir { "${params.out_dir}/${sample}" }, mode: 'copy', enabled: !params.run_annotation,
    saveAs: { name -> name == 'result' ? null : name.replaceFirst(/^result\//, '') }
  input:
- tuple val(sample), path(alignment), path(coverage), path(clair3), path(provenance)
+ tuple val(sample), path(alignment), path(coverage), path(varcalling), path(provenance)
  tuple path(ref), path(fai), path(mmi)
  output:
  tuple val(sample), path('result/*', type: 'any'), emit: results
  script:
  """
  mkdir result
- cp -aL --reflink=auto '${alignment}' '${clair3}' '${provenance}' result/
+ cp -aL --reflink=auto '${alignment}' '${varcalling}' '${provenance}' result/
  cp '${coverage}' result/alignment/
  export SAMPLE='${sample}' REF='${ref}' MASK_DEPTH=${params.mask_depth}
+ export MIN_VARIANT_QUAL=${params.min_variant_qual} MIN_VARIANT_DEPTH=${params.min_variant_depth} MIN_VARIANT_AF=${params.min_variant_af}
  export OPTIONS_RUNNER='${projectDir}/bin/run_options.py'
  export MASK_DEPTH_OPTS_B64='${(params.mask_depth_opts ?: '').toString().bytes.encodeBase64().toString()}'
  export CONSENSUS_OPTS_B64='${(params.consensus_opts ?: '').toString().bytes.encodeBase64().toString()}'
@@ -177,8 +178,6 @@ process SNPEFF_ANNOTATE {
 process SNPSIFT_TABLE {
  label 'snpsift'
  tag { sample }
- publishDir { "${params.out_dir}/${sample}" }, mode: 'copy',
-   saveAs: { name -> name == 'result' ? null : name.replaceFirst(/^result\//, '') }
  input:
  tuple val(sample), path(source, stageAs: 'source_result/*'), path(annotated), path(annotation_provenance)
  output:
@@ -192,6 +191,22 @@ process SNPSIFT_TABLE {
  SnpSift extractFields -s ';' -e '.' 'result/annot/${sample}_annot.vcf' POS REF ALT \
    'ANN[*].GENE' 'ANN[*].IMPACT' 'ANN[*].EFFECT' 'GEN[0].GT' 'GEN[0].DP' 'GEN[0].AF' 'ANN[*].HGVS_C' 'ANN[*].HGVS_P' | \
    awk -v s='${sample}' 'BEGIN {OFS="\t"} NR==1 {sub(/^#/, ""); print "Sample",\$0; next} {print s,\$0}' > result/annot/var.tsv
+ """
+}
+
+process ANNOTATION_WORKBOOK {
+ label 'wf_common'
+ tag { sample }
+ publishDir { "${params.out_dir}/${sample}" }, mode: 'copy',
+   saveAs: { name -> name == 'result' ? null : name.replaceFirst(/^result\//, '') }
+ input:
+ tuple val(sample), path(source, stageAs: 'source_result/*')
+ output:
+ tuple val(sample), path('result/*', type: 'any'), emit: results
+ script:
+ """
+ cp -aL --reflink=auto source_result result
+ python3 '${projectDir}/bin/annotation_workbook.py' result/annot/var.tsv result/annot/var.xlsx
  """
 }
 
@@ -245,6 +260,19 @@ process SAMPLE_SUMMARY {
  """
 }
 
+process TOOL_VERSIONS {
+ container { image }
+ tag { group }
+ input:
+ tuple val(group), val(image), val(tools)
+ output:
+ path "${group}.versions.tsv"
+ script:
+ """
+ bash '${projectDir}/bin/tool_versions.sh' '${group}.versions.tsv' ${tools.join(' ')}
+ """
+}
+
 process WORKFLOW_REPORT {
  label 'wf_common'
  publishDir params.out_dir, mode: 'copy'
@@ -252,17 +280,19 @@ process WORKFLOW_REPORT {
  path summaries, stageAs: 'samples??/*'
  val missing_samples
  val sample_details
+ path tool_versions, stageAs: 'versions/*'
  output:
  path 'wf-virus-longread-report.html'
  path 'results.json'
  script:
- def settings = [workflow_version: workflow.manifest.version,
+ def settings = [workflow_version: workflow.manifest.version, nextflow_version: nextflow.version.toString(),
    missing_samples: missing_samples,
    sample_metadata: sample_details,
    run_name: workflow.runName, session_id: workflow.sessionId.toString(),
    reference_based_assembly: params.reference_based_assembly, reference: params.reference,
    run_annotation: params.run_annotation, annotation_gff: params.annotation_gff, snpeff_cache: params.snpeff_cache,
    min_mapq: params.min_mapq, min_coverage: params.min_coverage,
+   min_variant_qual: params.min_variant_qual, min_variant_depth: params.min_variant_depth, min_variant_af: params.min_variant_af,
    mask_depth: params.mask_depth, mask_depth_opts: params.mask_depth_opts,
    consensus_opts: params.consensus_opts, flye_opts: params.flye_opts,
    min_read_length: params.min_read_length,
@@ -273,7 +303,7 @@ process WORKFLOW_REPORT {
  def summary_files = summaries instanceof List ? summaries : [summaries]
  def encoded = groovy.json.JsonOutput.toJson(settings).bytes.encodeBase64().toString()
  """
- python3 '${projectDir}/bin/report.py' aggregate '${encoded}' ${summary_files.collect { "'${it}'" }.join(' ')}
+ python3 '${projectDir}/bin/report.py' aggregate '${encoded}' --versions-dir versions ${summary_files.collect { "'${it}'" }.join(' ')}
  """
 }
 
@@ -281,9 +311,10 @@ workflow {
  if (params.help) { log.info 'See README.md. Required: --fastq. Default mode: de novo contigs only.'; return }
  if (!params.fastq) error 'Select --fastq (FASTQ file or directory)'
  if (!params.out_dir) error 'Unable to resolve output directory; specify --out_dir'
- ['threads','flye_genome_size','min_mapq','min_coverage','mask_depth','min_read_length'].each { k ->
+ ['threads','flye_genome_size','min_mapq','min_coverage','mask_depth','min_read_length','min_variant_qual','min_variant_depth'].each { k ->
    if (!(params[k].toString() ==~ /[0-9]+/)) error "--${k} must be an integer"
  }
+ if (!(params.min_variant_af.toString() ==~ /[0-9]+(\.[0-9]+)?/) || (params.min_variant_af as double) > 1) error '--min_variant_af must be a fraction from 0 to 1'
  if ((params.threads as int) < 1 || (params.flye_genome_size as int) < 1) error 'threads and genome size must be positive'
  if (params.override_basecaller_cfg && !(params.override_basecaller_cfg ==~ /[A-Za-z0-9_.@+-]+/)) error 'Invalid basecaller name'
  def root = file(params.fastq, checkIfExists: true)
@@ -388,10 +419,11 @@ workflow {
        }
      }
      SNPEFF_ANNOTATE(REFERENCE_ANALYSIS.out.results.map { sample, result ->
-       tuple(sample, result.find { it.name == 'clair3' }.resolve("${sample}_norm.vcf.gz"))
+       tuple(sample, result.find { it.name == 'varcalling' }.resolve("${sample}_norm.vcf.gz"))
      }, resources)
      SNPSIFT_TABLE(REFERENCE_ANALYSIS.out.results.join(SNPEFF_ANNOTATE.out))
-     analysis_results = SNPSIFT_TABLE.out.results.map { sample, result -> tuple(sample, result, file("${projectDir}/model_map.tsv"), file("${projectDir}/clair3_model_catalog.json")) }
+     ANNOTATION_WORKBOOK(SNPSIFT_TABLE.out.results)
+     analysis_results = ANNOTATION_WORKBOOK.out.results.map { sample, result -> tuple(sample, result, file("${projectDir}/model_map.tsv"), file("${projectDir}/clair3_model_catalog.json")) }
    }
  } else {
    DE_NOVO_CONTIGS(INGEST.out.reads)
@@ -401,5 +433,19 @@ workflow {
  metadata_results = INGEST.out.reads.map { sample, reads, metadata -> tuple(sample, metadata) }
  SAMPLE_SUMMARY(metadata_results.join(QC.out).join(analysis_results).join(INGEST.out.stats)
    .map { sample, metadata, qc, analysis, flye, coverage, stats -> tuple(sample, metadata, qc, analysis, stats, flye, coverage) })
- WORKFLOW_REPORT(SAMPLE_SUMMARY.out.toList(), missing_samples, sample_details)
+ def version_jobs = [
+   ['common', params.images.wf_common, ['fastcat','bgzip','Python']],
+   ['mapping', params.images.wf_bacterial, ['mini_align','minimap2','samtools','bcftools']],
+   ['nanoplot', params.container ?: params.images.nanoplot, ['NanoPlot']]]
+ if (params.reference_based_assembly) {
+   version_jobs += [['clair3', params.container ?: params.images.clair3, ['Clair3']],
+                    ['coverage', params.container ?: params.images.deeptools, ['bamCoverage']]]
+   if (params.run_annotation) version_jobs += [
+     ['snpeff', params.container ?: params.images.snpeff, ['snpEff','Java']],
+     ['snpsift', params.container ?: params.images.snpsift, ['SnpSift']]]
+ } else {
+   version_jobs += [['flye', params.images.wf_bacterial, ['Flye']]]
+ }
+ TOOL_VERSIONS(Channel.fromList(version_jobs))
+ WORKFLOW_REPORT(SAMPLE_SUMMARY.out.toList(), missing_samples, sample_details, TOOL_VERSIONS.out.toList())
 }

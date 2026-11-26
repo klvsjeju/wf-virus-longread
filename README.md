@@ -112,11 +112,11 @@ For report QC, the retained reads are mapped back to those contigs. Primary mapp
 
 The selected reference is indexed, reads are aligned using `mini_align`, and samtools removes unmapped, secondary, supplementary and low-MAPQ alignments. Clair3 performs ONT haploid-sensitive variant calling using the selected checkpoint.
 
-Bcftools normalizes the merged calls and extracts PASS records. The full normalized VCF supplies report variant statistics. The PASS VCF supplies the consensus, together with the selected consensus options and optional low-coverage mask. Total and strand-specific depth are calculated using the configured depth options.
+Bcftools normalizes the merged calls and retains QUAL >=20 and sample FORMAT/DP >=30 in `<sample>_norm.vcf.gz` by default, without requiring caller PASS or an AF threshold. Report statistics and annotation use this QUAL/DP-filtered VCF. `<sample>_norm.cons.vcf.gz` additionally requires existing PASS status and FORMAT/AF >=0.5 (50% inclusive); it supplies consensus generation with optional low-coverage masking. Missing required values are excluded. Adjust `min_variant_qual`, `min_variant_depth` and `min_variant_af` in Advanced options. Clair3 `min_coverage` is a separate caller setting.
 
 ### 3. Optional variant annotation
 
-When `run_annotation` is enabled, snpEff annotates the **full normalized VCF**, including non-PASS records. SnpSift extracts a TSV with positions, alleles, genes, effects, impacts, genotype, depth, allele fraction and HGVS fields.
+When `run_annotation` is enabled, snpEff annotates the **QUAL/DP-filtered normalized VCF**, including qualifying non-PASS records. SnpSift extracts a TSV with positions, alleles, genes, effects, impacts, genotype, depth, allele fraction and HGVS fields. The workflow also writes `annot/var.xlsx` with SNPs, Indels and Other variants worksheets, preserving every TSV column and record. Simple single-base substitutions go to SNPs; sequence alleles of unequal length go to Indels; equal-length multi-base substitutions, symbolic alleles and other records go to Other variants. The original `var.tsv` is retained.
 
 The alignment reference FASTA is reused automatically. In EPI2ME, choose:
 
@@ -141,7 +141,7 @@ Names and coordinate consistency do not independently prove that a GFF without e
 
 Cache reuse requires matching reference sequence/ID hashes, GFF identity when provided, snpEff version and preparation policy. Stored resource hashes are checked before reuse. Incomplete or changed cache bundles cause an error instead of being silently overwritten. Raw legacy databases without workflow provenance are not auto-selected. Legacy `snpeff_config`, `snpeff_data`, `snpeff_db` remain CLI-only and must be supplied together, without `annotation_gff`; their reference identity is explicitly marked unverified.
 
-Annotation is optional and is not run in de novo mode. The annotated VCF and TSV remain under `<sample>/annot/`, with `annotation_provenance.json` recording database identity, validation, normalization, tool version and cache reuse. The report displays the provenance summary. This mode builds from local FASTA+GFF and does not download annotations from an accession.
+Annotation is optional and is not run in de novo mode. The annotated VCF and TSV remain under `<sample>/annot/`, with `annotation_provenance.json` recording database identity, validation, normalization, tool version and cache reuse. Provenance remains available as JSON under Result files. This mode builds from local FASTA+GFF and does not download annotations from an accession.
 
 ## Main options
 
@@ -159,6 +159,9 @@ EPI2ME groups the launch settings into Input options, Sample options, Advanced o
 | `override_basecaller_cfg` | Unset | Manually identify the model used to basecall the existing reads. |
 | `min_mapq` | `20` | Minimum MAPQ for retained reference alignments and de novo coverage QC. |
 | `min_coverage` | `30` | Clair3 minimum coverage. |
+| `min_variant_qual` | `20` | Minimum inclusive QUAL for both normalized VCFs. |
+| `min_variant_depth` | `30` | Minimum inclusive sample FORMAT/DP for both normalized VCFs. |
+| `min_variant_af` | `0.5` | Minimum inclusive sample FORMAT/AF for consensus VCF only (50%). |
 | `mask_depth` | `0` | Mask positions below this depth in the reference consensus; `0` disables the mask. |
 | `run_annotation` | `false` | Enable snpEff and SnpSift in reference mode. |
 | `annotation_gff` | Unset | Matching GFF3 for automatic DB construction. |
@@ -197,7 +200,7 @@ All per-sample results are grouped directly under `<out_dir>/<sample>/`:
 <out_dir>/
 ├── <sample>/
 │   ├── alignment/             # Reference BAM/index and total/fwd/rev depth
-│   ├── clair3/                # Reference VCFs, consensus, optional mask and statistics
+│   ├── varcalling/                # Reference VCFs, consensus, optional mask and statistics
 │   ├── annot/                 # Optional reference annotation
 │   ├── model_selection.json   # Reference Clair3 model provenance
 │   ├── <sample>.contigs.fasta  # De novo contigs
@@ -220,8 +223,8 @@ Only folders relevant to the selected mode are created. If `out_dir` is unset, t
 | File | Contents / use |
 | --- | --- |
 | `<sample>_merge_output.vcf.gz` | Merged Clair3 calls retained for provenance. |
-| `<sample>_norm.vcf.gz` | All normalized calls, including non-PASS records; used for report statistics and annotation. |
-| `<sample>_norm.pass.vcf.gz` | PASS calls used to generate the consensus. |
+| `<sample>_norm.vcf.gz` | QUAL/DP-filtered normalized calls, including qualifying non-PASS records; used for report statistics and annotation. |
+| `<sample>_norm.cons.vcf.gz` | Subset meeting QUAL/DP thresholds plus existing PASS and AF >=0.5 by default; used for consensus. |
 | `<sample>_annot.vcf` | Optional snpEff-annotated normalized calls, stored in `annot/`. |
 | `<sample>_consensus.fa` | Reference-guided consensus. |
 
@@ -239,10 +242,10 @@ The report uses EPI2ME Labs components with sample dropdowns, searchable tables 
 | Variant calling | Reference-based | Counts from the full normalized VCF, Ts/Tv, substitution heatmap and indel length histogram. |
 | Genome coverage | Both modes | Total/fwd/rev depth plots and coverage statistics, including 30x/50x percentages. |
 | Consensus and masking | Reference-based | Consensus totals and mask links. |
-| Variant annotations | Annotation enabled | snpEff impact/effect summaries and a TSV preview with a full-file link. |
+| Variant annotations | Annotation enabled | Complete annotation table, with all rows and columns. |
 | Models, files and execution | Common | Model provenance, result links, runtime information and container settings. |
 
-Coverage statistics use all assessed positions; plots summarize at most 500 bins per reference/contig and display the 20 longest sequences. Full depth files remain available. Missing coverage produces an explanatory message. Annotation previews contain at most 500 rows per sample; the complete TSV is linked.
+Coverage statistics use all assessed positions; plots summarize at most 500 bins per reference/contig and display the 20 longest sequences. Full depth files remain available. Missing coverage produces an explanatory message. The annotation section shows the complete searchable/paginated table, without the previous 500-row limit or impact/effect/provenance summaries. Software versions includes tools queried in the configured analysis containers; unused tools are marked as not used, and unsuccessful version detection is stated explicitly. Container environment/image tables are omitted from the HTML report.
 
 EPI2ME Desktop provides the following tabs:
 
@@ -264,3 +267,7 @@ Keep the output directory structure intact when moving results so relative repor
 - **Annotation DB preparation fails:** check exact FASTA/GFF IDs (including versions), GFF coordinates, CDS phase and Parent links. Provide the intended GFF when no unique verified cache exists. Inspect the task log and `snpeff_build_failed.log` for build failures.
 
 The shared input handling and report structure were adapted with reference to [wf-bacterial-genomes](https://github.com/epi2me-labs/wf-bacterial-genomes). This viral workflow uses Clair3 and snpEff and does not include the bacterial workflow's MLST, AMR, species identification or plasmid analyses. Implementation and execution checks are recorded in [VALIDATION.txt](VALIDATION.txt).
+
+### Report header styling
+
+`bin/report_branding.py` controls the white/red header, badge colors and custom bird-logo link to this GitHub repository. The unmodified reference artwork is stored in `bin/report_assets/header-reference.png`; the logo viewport is embedded in the final HTML, so no external artwork is needed when sharing a report. Date and workflow version are generated dynamically. To deploy this design, include the branding helper and its asset directory as well as `bin/labs_report.py`.

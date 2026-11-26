@@ -120,7 +120,7 @@
         "min_mapq": {
           "type": "integer",
           "title": "Minimum MAPQ",
-          "description": "Minimum mapping quality for reads to be used in variant calling. Default 20.",
+          "description": "Minimum mapping quality for reads. Default 20.",
           "default": 20,
           "minimum": 0
         },
@@ -151,6 +151,28 @@
           "description": "Extra bcftools consensus arguments. e.g. --include 'FORMAT/AF>0.5'.",
           "default": "",
           "help_text": "Enter command-line arguments only. AF is a fraction from 0 to 1, not a percentage."
+        },
+        "min_variant_qual": {
+          "type": "integer",
+          "title": "Minimum variant QUAL",
+          "description": "Minimum inclusive QUAL for norm.vcf.gz and its consensus subset. Default 20. Missing QUAL is excluded; report statistics and annotation use this filtered normalized VCF.",
+          "default": 20,
+          "minimum": 0
+        },
+        "min_variant_depth": {
+          "type": "integer",
+          "title": "Minimum variant sample depth",
+          "description": "Minimum inclusive sample FORMAT/DP for norm.vcf.gz and its consensus subset. Default 30. Separate from Clair3 minimum coverage; missing DP is excluded.",
+          "default": 30,
+          "minimum": 0
+        },
+        "min_variant_af": {
+          "type": "number",
+          "title": "Minimum consensus allele fraction",
+          "description": "Additional inclusive sample FORMAT/AF threshold for norm.cons.vcf.gz and consensus. Default 0.5 (50%). Existing PASS status is also required; missing AF is excluded. norm.vcf.gz is not AF-filtered.",
+          "default": 0.5,
+          "minimum": 0,
+          "maximum": 1
         }
       }
     },

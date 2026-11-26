@@ -49,7 +49,7 @@
       "type": "per-sample"
     },
     "consensus": {
-      "filepath": "{{ alias }}/clair3/{{ alias }}_consensus.fa",
+      "filepath": "{{ alias }}/varcalling/{{ alias }}_consensus.fa",
       "title": "Reference consensus FASTA",
       "description": "Reference consensus FASTA",
       "mime-type": "text/plain",
@@ -57,7 +57,7 @@
       "type": "per-sample"
     },
     "mask": {
-      "filepath": "{{ alias }}/clair3/low_coverage.bed",
+      "filepath": "{{ alias }}/varcalling/low_coverage.bed",
       "title": "Low coverage mask BED",
       "description": "Low coverage mask BED",
       "mime-type": "text/plain",
@@ -65,17 +65,17 @@
       "type": "per-sample"
     },
     "variants": {
-      "filepath": "{{ alias }}/clair3/{{ alias }}_norm.pass.vcf.gz",
+      "filepath": "{{ alias }}/varcalling/{{ alias }}_norm.cons.vcf.gz",
       "title": "PASS variants VCF",
-      "description": "PASS variants VCF",
+      "description": "Consensus subset: QUAL >=20, FORMAT/DP >=30, FORMAT/AF >=0.5 and existing PASS by default; thresholds are configurable.",
       "mime-type": "application/gzip",
       "optional": true,
       "type": "per-sample"
     },
     "normalized-variants": {
-      "filepath": "{{ alias }}/clair3/{{ alias }}_norm.vcf.gz",
-      "title": "All normalized variants VCF",
-      "description": "Normalized variants including non-PASS records.",
+      "filepath": "{{ alias }}/varcalling/{{ alias }}_norm.vcf.gz",
+      "title": "QUAL/DP-filtered normalized variants VCF",
+      "description": "QUAL >=20 and sample FORMAT/DP >=30 by default, including qualifying non-PASS records; no AF filter. Used for statistics and annotation.",
       "mime-type": "application/gzip",
       "optional": true,
       "type": "per-sample"
@@ -89,9 +89,9 @@
       "type": "per-sample"
     },
     "variant-statistics": {
-      "filepath": "{{ alias }}/clair3/variants.stats",
+      "filepath": "{{ alias }}/varcalling/variants.stats",
       "title": "All normalized variant statistics",
-      "description": "bcftools stats for all normalized variants before PASS filtering, used by the workflow report.",
+      "description": "bcftools statistics after normalized QUAL/DP selection, before consensus AF/PASS selection.",
       "mime-type": "text/plain",
       "optional": true,
       "type": "per-sample"
@@ -176,8 +176,8 @@
       "optional": true,
       "type": "per-sample"
     },
-    "clair3-folder": {
-      "filepath": "{{ alias }}/clair3",
+    "varcalling-folder": {
+      "filepath": "{{ alias }}/varcalling",
       "title": "Variants and consensus",
       "description": "Normalized VCFs, consensus FASTA, masks and variant statistics.",
       "mime-type": "inode/directory",
@@ -311,6 +311,14 @@
       "mime-type": "inode/directory",
       "optional": true,
       "type": "aggregated"
+    },
+    "annotation-workbook": {
+      "filepath": "{{ alias }}/annot/var.xlsx",
+      "title": "Variant annotation Excel workbook",
+      "description": "SNPs, Indels and Other variants worksheets preserving all TSV columns and records.",
+      "mime-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "optional": true,
+      "type": "per-sample"
     }
   }
 }

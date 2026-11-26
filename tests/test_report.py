@@ -40,14 +40,14 @@ class ReportTests(unittest.TestCase):
 
     def test_reference_optional_mask(self):
         with tempfile.TemporaryDirectory() as d:
-            p=Path(d); (p/'clair3').mkdir()
-            (p/'clair3/s_consensus.fa').write_text('>s\nACNN\n')
+            p=Path(d); (p/'varcalling').mkdir()
+            (p/'varcalling/s_consensus.fa').write_text('>s\nACNN\n')
             meta=p/'metadata.json'; meta.write_text('{"selected":null}')
             self.assertNotIn('Mask BED',report.sample_summary('s','reference',meta,p)['files'])
-            (p/'clair3/low_coverage.bed').write_text('ref\t2\t4\n')
+            (p/'varcalling/low_coverage.bed').write_text('ref\t2\t4\n')
             row=report.sample_summary('s','reference',meta,p)
-            self.assertEqual(row['files']['Variants'], 's/clair3/s_norm.pass.vcf.gz')
-            self.assertEqual(row['files']['Consensus FASTA'], 's/clair3/s_consensus.fa')
+            self.assertEqual(row['files']['Variants'], 's/varcalling/s_norm.cons.vcf.gz')
+            self.assertEqual(row['files']['Consensus FASTA'], 's/varcalling/s_consensus.fa')
             self.assertEqual(row['files']['QC report'], 's/qc/NanoPlot/s_NanoPlot-report.html')
             self.assertEqual(row['files']['Basecalling metadata'], 's/metadata/basecaller.json')
             self.assertEqual(row['variant_statistics_source'], 's_norm.vcf.gz')

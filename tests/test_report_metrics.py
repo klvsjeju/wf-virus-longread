@@ -72,15 +72,26 @@ class MetricsTests(unittest.TestCase):
             data = report.annotations_summary(path, limit=1)
             self.assertEqual(data['records'], 2)
             self.assertEqual(len(data['preview']), 1)
+            complete = report.annotations_summary(path)
+            self.assertEqual(len(complete['preview']), 2)
+            self.assertIsNone(complete['preview_limit'])
             self.assertEqual(data['impacts'], {'HIGH': 1, 'LOW': 1})
+
+    def test_complete_annotation_table_exceeds_previous_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'var.tsv'
+            path.write_text('POS\tREF\tALT\n' + ''.join(f'{i}\tA\tC\n' for i in range(1, 602)))
+            data = report.annotations_summary(path)
+            self.assertEqual(len(data['preview']), 601)
+            self.assertEqual(data['preview'][-1]['POS'], '601')
 
     @unittest.skipUnless(importlib.util.find_spec('ezcharts'), 'Requires the wf-common container')
     def test_labs_reference_render_and_all_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / 'clair3').mkdir(); (root / 'alignment').mkdir(); (root / 'annot').mkdir()
-            (root / 'clair3/s_consensus.fa').write_text('>s\nACNN\n')
-            (root / 'clair3/variants.stats').write_text('SN\t0\tnumber of records:\t2\nTSTV\t0\t1\t1\t1\nST\t0\tA>G\t1\nST\t0\tC>A\t1\nIDD\t0\t-1\t1\nIDD\t0\t2\t1\n')
+            (root / 'varcalling').mkdir(); (root / 'alignment').mkdir(); (root / 'annot').mkdir()
+            (root / 'varcalling/s_consensus.fa').write_text('>s\nACNN\n')
+            (root / 'varcalling/variants.stats').write_text('SN\t0\tnumber of records:\t2\nTSTV\t0\t1\t1\t1\nST\t0\tA>G\t1\nST\t0\tC>A\t1\nIDD\t0\t-1\t1\nIDD\t0\t2\t1\n')
             (root / 'alignment/s.depth').write_text('ref\t1\t0\nref\t2\t50\n')
             (root / 'annot/var.tsv').write_text('POS\tANN[*].IMPACT\tANN[*].EFFECT\n2\tHIGH\tstop_gained\n')
             meta = root / 'meta.json'; meta.write_text('{"selected":"model<a>"}')
@@ -88,11 +99,20 @@ class MetricsTests(unittest.TestCase):
             (stats / 'length.hist').write_text('100\t101\t2\n200\t201\t1\n')
             (stats / 'quality.hist').write_text('10\t10.1\t2\n40\t40.1\t1\n')
             sample = report.sample_summary('s', 'reference', meta, root, stats)
-            report.aggregate([sample], {'run_annotation': True, 'workflow_version': '0.3.3'}, root)
+            report.aggregate([sample], {'run_annotation': True, 'workflow_version': '0.3.3', 'reference_based_assembly': True, 'software_versions': {'Clair3':'1.2.0'}, 'containers': {'mapping':'private-image-marker'}}, root)
             text = (root / 'wf-virus-longread-report.html').read_text()
             for marker in ['Sample summary', 'Variant calling', 'Genome coverage', 'Variant annotations', 'model&lt;a&gt;', 'Software versions', 'Workflow parameters', 'ezcharts']:
                 self.assertTrue(marker in text, marker)
+            self.assertIn('1.2.0', text)
+            self.assertNotIn('private-image-marker', text)
+            self.assertNotIn('Showing at most', text)
+            self.assertNotIn('Annotated VCF records:', text)
             self.assertTrue('Custom wf-virus-longread workflow maintained by klvsjeju.' in text)
+            self.assertIn('Circular bird logo', text)
+            self.assertIn('https://github.com/klvsjeju/wf-virus-longread', text)
+            self.assertIn('data:image/png;base64,', text)
+            self.assertIn('background-image: url("data:image/png;base64,', text)
+            self.assertIn('Research only', text)
             self.assertFalse('workflow provided by Oxford Nanopore Technologies.' in text)
             self.assertTrue('Read summary' in text)
             self.assertFalse('Assembly summary statistics' in text)

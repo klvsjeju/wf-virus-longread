@@ -128,14 +128,14 @@ def variant_summary(path):
     return result
 
 
-def annotations_summary(path, limit=500):
+def annotations_summary(path, limit=None):
     if not path.exists():
         return None
     preview, impacts, effects, count = [], Counter(), Counter(), 0
     with path.open() as handle:
         for row in csv.DictReader(handle, delimiter='\t'):
             count += 1
-            if len(preview) < limit:
+            if limit is None or len(preview) < limit:
                 preview.append(row)
             for key, target in [('ANN[*].IMPACT', impacts), ('ANN[*].EFFECT', effects)]:
                 # Count each unique value once per annotated VCF record.
@@ -150,15 +150,15 @@ def sample_summary(sample, mode, metadata, analysis, stats=None, flye=None, mask
              'Basecalling metadata': f'{sample}/metadata/basecaller.json'}
     extra = {}
     if mode == 'reference':
-        fasta = analysis / 'clair3' / f'{sample}_consensus.fa'
-        links.update({'Consensus FASTA': f'{prefix}/clair3/{sample}_consensus.fa',
-                      'Variants': f'{prefix}/clair3/{sample}_norm.pass.vcf.gz',
-                      'All normalized variants': f'{prefix}/clair3/{sample}_norm.vcf.gz',
+        fasta = analysis / 'varcalling' / f'{sample}_consensus.fa'
+        links.update({'Consensus FASTA': f'{prefix}/varcalling/{sample}_consensus.fa',
+                      'Variants': f'{prefix}/varcalling/{sample}_norm.cons.vcf.gz',
+                      'QUAL/DP-filtered normalized variants': f'{prefix}/varcalling/{sample}_norm.vcf.gz',
                       'Alignment BAM': f'{prefix}/alignment/{sample}_sorted.bam',
                       'Depth': f'{prefix}/alignment/{sample}.depth',
                       'Clair3 model selection': f'{prefix}/model_selection.json'})
         extra['coverage'] = coverage_with_strands(analysis / 'alignment', sample, mask_depth)
-        extra['variants'] = variant_summary(analysis / 'clair3/variants.stats')
+        extra['variants'] = variant_summary(analysis / 'varcalling/variants.stats')
         extra['variant_statistics_source'] = f'{sample}_norm.vcf.gz'
         extra['annotations'] = annotations_summary(analysis / 'annot/var.tsv')
         provenance = analysis / 'annot/annotation_provenance.json'
@@ -167,11 +167,13 @@ def sample_summary(sample, mode, metadata, analysis, stats=None, flye=None, mask
             links['Annotation database provenance'] = f'{sample}/annot/annotation_provenance.json'
         if extra['annotations'] is not None:
             links['Annotations'] = f'{prefix}/annot/var.tsv'
+            if (analysis / 'annot/var.xlsx').exists():
+                links['Annotation workbook'] = f'{prefix}/annot/var.xlsx'
             links['Annotated VCF'] = f'{prefix}/annot/{sample}_annot.vcf'
-        if (analysis / 'clair3/variants.stats').exists():
-            links['Variant statistics'] = f'{prefix}/clair3/variants.stats'
-        if (analysis / 'clair3/low_coverage.bed').exists():
-            links['Mask BED'] = f'{prefix}/clair3/low_coverage.bed'
+        if (analysis / 'varcalling/variants.stats').exists():
+            links['Variant statistics'] = f'{prefix}/varcalling/variants.stats'
+        if (analysis / 'varcalling/low_coverage.bed').exists():
+            links['Mask BED'] = f'{prefix}/varcalling/low_coverage.bed'
     else:
         fasta = analysis
         extra['coverage'] = coverage_with_strands(coverage, sample) if coverage and coverage.is_dir() else []
@@ -213,13 +215,21 @@ def main():
     s.add_argument('--coverage', type=Path)
     s.add_argument('--mask-depth', type=int, default=0)
     a = sub.add_parser('aggregate')
-    a.add_argument('settings'); a.add_argument('summaries', nargs='*', type=Path)
+    a.add_argument('--versions-dir', type=Path); a.add_argument('settings'); a.add_argument('summaries', nargs='*', type=Path)
     args = p.parse_args()
     if args.command == 'sample':
         row = sample_summary(args.sample, args.mode, args.metadata, args.analysis, args.stats, args.flye, args.mask_depth, args.coverage)
         Path('summary.json').write_text(json.dumps(row, indent=2))
     else:
-        aggregate([json.loads(p.read_text()) for p in args.summaries], json.loads(base64.b64decode(args.settings)), Path('.'))
+        settings = json.loads(base64.b64decode(args.settings))
+        versions = {}
+        if args.versions_dir:
+            for path in sorted(args.versions_dir.glob('*.versions.tsv')):
+                with path.open() as handle:
+                    for row in csv.DictReader(handle, delimiter='\t'):
+                        versions.setdefault(row['Tool'], set()).add(row['Version'])
+        settings['software_versions'] = {key: ' / '.join(sorted(values)) for key, values in versions.items()}
+        aggregate([json.loads(p.read_text()) for p in args.summaries], settings, Path('.'))
 
 if __name__ == '__main__':
     main()

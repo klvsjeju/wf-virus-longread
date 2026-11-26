@@ -61,7 +61,7 @@
       "properties": {
         "override_basecaller_cfg": {
           "type": "string",
-          "title": "Manual basecalling model",
+          "title": "[reference-based] Manual basecalling model",
           "description": "Leave unset to infer from FASTQ headers. A manual selection overrides the inferred name.",
           "enum": [
             "dna_r10.4.1_e8.2_400bps_sup@v5.2.0",
@@ -100,79 +100,58 @@
         },
         "flye_genome_size": {
           "type": "integer",
-          "title": "Estimated genome size (bp)",
+          "title": "[de novo] Estimated genome size (bp)",
           "description": "Estimated genome size for de novo assembly (e.g 5000000 for 5 Mb genome)"
         },
         "min_read_length": {
           "type": "integer",
-          "title": "Minimum read length (bp)",
+          "title": "[de novo] Minimum read length (bp)",
           "description": "De novo assembly only: exclude reads shorter than this length before QC and Flye. Default 1000. Set to 0 to disable filtering.",
           "default": 1000,
           "minimum": 0
         },
         "flye_opts": {
           "type": "string",
-          "title": "Additional Flye options",
+          "title": "[de novo] Additional Flye options",
           "description": "Extra Flye arguments, e.g. --meta --iterations 2 --asm-coverage 50.",
           "default": "",
           "help_text": "Enter command-line arguments only. Quoted values are supported."
         },
         "min_mapq": {
           "type": "integer",
-          "title": "Minimum MAPQ",
+          "title": "[reference-based] [de novo] Minimum MAPQ",
           "description": "Minimum mapping quality for reads. Default 20.",
           "default": 20,
-          "minimum": 0
+          "minimum": 0,
+          "help_text": "Reference-based: filters alignments used for calling and depth. De novo: filters coverage-QC alignments only; does not filter Flye input."
         },
         "min_coverage": {
           "type": "integer",
-          "title": "Clair3 min coverage",
+          "title": "[reference-based] Clair3 min coverage",
           "description": "Minimum coverage for variants to be called by Clair3. Default 30.",
           "default": 30,
           "minimum": 0
         },
-        "mask_depth": {
-          "type": "integer",
-          "title": "Consensus N-mask depth",
-          "description": "Threshold for masking N bases in the consensus sequence. Default 0.",
-          "default": 0,
-          "minimum": 0
-        },
-        "mask_depth_opts": {
-          "type": "string",
-          "title": "Additional mask depth options",
-          "description": "Extra samtools depth arguments used to compute depth and the low-coverage BED mask, e.g. -q 15 -Q 20. Default -aa -J. ",
-          "default": "",
-          "help_text": "Enter command-line arguments only. Quoted values are supported."
-        },
         "consensus_opts": {
           "type": "string",
-          "title": "Additional consensus options",
-          "description": "Extra bcftools consensus arguments. e.g. --include 'FORMAT/AF>0.5'.",
-          "default": "",
-          "help_text": "Enter command-line arguments only. AF is a fraction from 0 to 1, not a percentage."
+          "title": "[reference-based] Additional consensus options",
+          "description": "Independent thresholds for norm.cons.vcf.gz: --min-dp 30 --min-qual 20 --min-af 0.5. Set a threshold to 0 to disable it; all three 0 apply no DP/QUAL/AF filtering.",
+          "default": "--min-dp 30 --min-qual 20 --min-af 0.5",
+          "help_text": "AF is a fraction: 0.5 = 50%, inclusive. Caller PASS status remains required even when thresholds are 0. Selects from normalized caller records independently of variant options. Extra bcftools consensus arguments are supported, e.g. --mask-with N."
         },
-        "min_variant_qual": {
-          "type": "integer",
-          "title": "Minimum variant QUAL",
-          "description": "Minimum inclusive QUAL for norm.vcf.gz and its consensus subset. Default 20. Missing QUAL is excluded; report statistics and annotation use this filtered normalized VCF.",
-          "default": 20,
-          "minimum": 0
+        "variant_opts": {
+          "type": "string",
+          "title": "[reference-based] Additional variant options",
+          "default": "--min-dp 30 --min-qual 20",
+          "description": "Independent thresholds for norm.vcf.gz: --min-dp 30 --min-qual 20. Set either to 0 to disable that threshold; both 0 retain all normalized calls, including missing values and non-PASS calls.",
+          "help_text": "Uses sample FORMAT/DP. QUAL is a non-negative number; DP is an integer. Report statistics and annotation use this VCF. Consensus filtering is independent."
         },
-        "min_variant_depth": {
-          "type": "integer",
-          "title": "Minimum variant sample depth",
-          "description": "Minimum inclusive sample FORMAT/DP for norm.vcf.gz and its consensus subset. Default 30. Separate from Clair3 minimum coverage; missing DP is excluded.",
-          "default": 30,
-          "minimum": 0
-        },
-        "min_variant_af": {
-          "type": "number",
-          "title": "Minimum consensus allele fraction",
-          "description": "Additional inclusive sample FORMAT/AF threshold for norm.cons.vcf.gz and consensus. Default 0.5 (50%). Existing PASS status is also required; missing AF is excluded. norm.vcf.gz is not AF-filtered.",
-          "default": 0.5,
-          "minimum": 0,
-          "maximum": 1
+        "mask_opts": {
+          "type": "string",
+          "title": "[reference-based] Consensus masking options",
+          "default": "--min-depth 0",
+          "description": "Combined N-mask threshold and samtools depth arguments. Example: --min-depth 10 -q 15 -Q 20. Default --min-depth 0 disables N-masking.",
+          "help_text": "--min-depth is a workflow option; positions below this depth are masked. Remaining arguments go to samtools depth for reference coverage/masking. -q is minimum base quality; -Q is minimum MAPQ. -aa -J remain enabled."
         }
       }
     },

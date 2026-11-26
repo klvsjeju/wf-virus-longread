@@ -141,9 +141,9 @@ def consensus_table(sample):
     assembly = sample['assembly']
     table([{'Consensus sequences': assembly['sequences'], 'Total length (bp)': assembly['total_bases'],
             'Longest sequence (bp)': assembly['longest']}])
-    html.p('Consensus sequences are generated from PASS variants with the selected '
+    html.p('Consensus sequences are generated from independently DP/QUAL/AF-filtered PASS variants with the selected '
            'bcftools consensus options and optional low-coverage mask. '
-           'Report variant statistics describe the QUAL/DP-filtered normalized VCF before consensus AF/PASS selection. '
+           'Report variant statistics describe the independently DP/QUAL-selected normalized VCF. '
            'Consensus uses PASS variants and can be restricted further by consensus options.')
     if 'Mask BED' in sample['files']:
         html.a('Download low-coverage mask BED', href=quote(sample['files']['Mask BED'], safe='/'))
@@ -259,7 +259,7 @@ def render(samples, settings, output):
         if reference:
             with report.add_section('Variant calling', 'Variants'):
                 html.p('Statistics from bcftools stats on the QUAL/DP-filtered normalized Clair3 VCF '
-                       '(<sample>_norm.vcf.gz), after QUAL/DP selection and before consensus AF/PASS selection. Qualifying PASS and non-PASS records are included. '
+                       '(<sample>_norm.vcf.gz), after the configured variant DP/QUAL selection. Consensus DP/QUAL/AF selection is independent. Qualifying PASS and non-PASS records are included. '
                        'Complementary substitutions are grouped, as in the reference workflow.')
                 table([dict({'Sample': row['sample']}, **row['variants']['counts'])
                        for row in reference if row.get('variants')])

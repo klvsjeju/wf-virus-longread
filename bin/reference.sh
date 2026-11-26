@@ -16,15 +16,19 @@ secondary="$(samtools view -c -f 0x100 "$bam")"
 supplementary="$(samtools view -c -f 0x800 "$bam")"
 printf 'alignment_type\tcount\nsecondary\t%s\nsupplementary\t%s\n' "$secondary" "$supplementary" > result/alignment/filter_check.tsv
 test "$secondary" = 0 && test "$supplementary" = 0
+python3 "$(dirname "$OPTIONS_RUNNER")/analysis_options.py"
+source result/analysis_options.env
+rm result/analysis_options.env
 bash "$(dirname "$OPTIONS_RUNNER")/report_depth.sh" "$bam" "$SAMPLE" result/alignment "$MASK_DEPTH_OPTS_B64"
-# QUAL/DP selection applies to the normalized VCF, regardless of caller FILTER status.
-variant_filter="QUAL!=\".\" && FORMAT/DP!=\".\" && QUAL>=${MIN_VARIANT_QUAL:-20} && FORMAT/DP>=${MIN_VARIANT_DEPTH:-30}"
-bcftools norm -f "$REF" -m -any "result/varcalling/${SAMPLE}_merge_output.vcf.gz" | bcftools sort -Ou | \
- bcftools view -i "$variant_filter" -Oz -o "result/varcalling/${SAMPLE}_norm.vcf.gz"
+# Both outputs are selected independently from the same normalized calls.
+bcftools norm -f "$REF" -m -any "result/varcalling/${SAMPLE}_merge_output.vcf.gz" | bcftools sort -Oz -o normalized_calls.vcf.gz
+variant_args=()
+consensus_args=(-f PASS)
+if [[ -n "$VARIANT_FILTER" ]]; then variant_args=(-i "$VARIANT_FILTER"); fi
+if [[ -n "$CONSENSUS_FILTER" ]]; then consensus_args+=(-i "$CONSENSUS_FILTER"); fi
+bcftools view "${variant_args[@]}" normalized_calls.vcf.gz -Oz -o "result/varcalling/${SAMPLE}_norm.vcf.gz"
 bcftools index -f "result/varcalling/${SAMPLE}_norm.vcf.gz"
-# Consensus additionally requires caller PASS and an inclusive allele-fraction threshold.
-consensus_filter="FORMAT/AF!=\".\" && FORMAT/AF>=${MIN_VARIANT_AF:-0.5}"
-bcftools view -f PASS -i "$consensus_filter" "result/varcalling/${SAMPLE}_norm.vcf.gz" -Oz -o "result/varcalling/${SAMPLE}_norm.cons.vcf.gz"
+bcftools view "${consensus_args[@]}" normalized_calls.vcf.gz -Oz -o "result/varcalling/${SAMPLE}_norm.cons.vcf.gz"
 bcftools index -f "result/varcalling/${SAMPLE}_norm.cons.vcf.gz"
 bcftools stats "result/varcalling/${SAMPLE}_norm.vcf.gz" > result/varcalling/variants.stats
 mask=()

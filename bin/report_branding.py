@@ -45,7 +45,7 @@ def apply_branding(report):
     .labs-banner.bg-dark { background-color: #fff !important; margin-bottom: 0 !important;
       padding: 34px 24px 48px !important; }
     .labs-banner .report-title { color: #000 !important; border: 0 !important; }
-    .labs-banner h1 { color: #000; font-weight: 750; font-size: clamp(2rem, 4vw, 4.5rem); line-height: 1.15; margin: 12px 0 32px; }
+    .labs-banner h1 { color: #000; font-weight: 750; font-size: clamp(1.5rem, 3vw, 4.5rem); line-height: 1.15; margin: 12px 0 32px; }
     .labs-banner .report-title > p { display: none; }
     .labs-banner .badge { color: #fff !important; background-color: var(--workflow-badge) !important;
       border: 2px solid var(--workflow-ink); border-radius: 9px !important;

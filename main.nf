@@ -135,10 +135,10 @@ process REFERENCE_ANALYSIS {
  mkdir result
  cp -aL --reflink=auto '${alignment}' '${varcalling}' '${provenance}' result/
  cp '${coverage}' result/alignment/
- export SAMPLE='${sample}' REF='${ref}' MASK_DEPTH=${params.mask_depth}
- export MIN_VARIANT_QUAL=${params.min_variant_qual} MIN_VARIANT_DEPTH=${params.min_variant_depth} MIN_VARIANT_AF=${params.min_variant_af}
+ export SAMPLE='${sample}' REF='${ref}'
  export OPTIONS_RUNNER='${projectDir}/bin/run_options.py'
- export MASK_DEPTH_OPTS_B64='${(params.mask_depth_opts ?: '').toString().bytes.encodeBase64().toString()}'
+ export VARIANT_OPTS_B64='${(params.variant_opts ?: '').toString().bytes.encodeBase64().toString()}'
+ export MASK_OPTS_B64='${(params.mask_opts ?: '').toString().bytes.encodeBase64().toString()}'
  export CONSENSUS_OPTS_B64='${(params.consensus_opts ?: '').toString().bytes.encodeBase64().toString()}'
  bash '${projectDir}/bin/reference.sh'
  """
@@ -256,7 +256,7 @@ process SAMPLE_SUMMARY {
  def mode = params.reference_based_assembly ? 'reference' : 'denovo'
  def analysis_path = params.reference_based_assembly ? 'analysis' : analysis
  """
- python3 '${projectDir}/bin/report.py' sample '${sample}' '${mode}' '${metadata}' '${analysis_path}' --stats '${stats}' --flye '${flye}' --coverage '${coverage}' --mask-depth ${params.mask_depth}
+ python3 '${projectDir}/bin/report.py' sample '${sample}' '${mode}' '${metadata}' '${analysis_path}' --stats '${stats}' --flye '${flye}' --coverage '${coverage}' --mask-depth 0
  """
 }
 
@@ -292,8 +292,7 @@ process WORKFLOW_REPORT {
    reference_based_assembly: params.reference_based_assembly, reference: params.reference,
    run_annotation: params.run_annotation, annotation_gff: params.annotation_gff, snpeff_cache: params.snpeff_cache,
    min_mapq: params.min_mapq, min_coverage: params.min_coverage,
-   min_variant_qual: params.min_variant_qual, min_variant_depth: params.min_variant_depth, min_variant_af: params.min_variant_af,
-   mask_depth: params.mask_depth, mask_depth_opts: params.mask_depth_opts,
+   variant_opts: params.variant_opts, mask_opts: params.mask_opts,
    consensus_opts: params.consensus_opts, flye_opts: params.flye_opts,
    min_read_length: params.min_read_length,
    effective_min_read_length: params.reference_based_assembly ? 0 : params.min_read_length,
@@ -311,10 +310,9 @@ workflow {
  if (params.help) { log.info 'See README.md. Required: --fastq. Default mode: de novo contigs only.'; return }
  if (!params.fastq) error 'Select --fastq (FASTQ file or directory)'
  if (!params.out_dir) error 'Unable to resolve output directory; specify --out_dir'
- ['threads','flye_genome_size','min_mapq','min_coverage','mask_depth','min_read_length','min_variant_qual','min_variant_depth'].each { k ->
+ ['threads','flye_genome_size','min_mapq','min_coverage','min_read_length'].each { k ->
    if (!(params[k].toString() ==~ /[0-9]+/)) error "--${k} must be an integer"
  }
- if (!(params.min_variant_af.toString() ==~ /[0-9]+(\.[0-9]+)?/) || (params.min_variant_af as double) > 1) error '--min_variant_af must be a fraction from 0 to 1'
  if ((params.threads as int) < 1 || (params.flye_genome_size as int) < 1) error 'threads and genome size must be positive'
  if (params.override_basecaller_cfg && !(params.override_basecaller_cfg ==~ /[A-Za-z0-9_.@+-]+/)) error 'Invalid basecaller name'
  def root = file(params.fastq, checkIfExists: true)

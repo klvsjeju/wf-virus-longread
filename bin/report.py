@@ -151,6 +151,11 @@ def sample_summary(sample, mode, metadata, analysis, stats=None, flye=None, mask
              'Basecalling metadata': f'{sample}/metadata/basecaller.json'}
     extra = {}
     if mode == 'reference':
+        options_path = analysis / 'analysis_options.json'
+        if options_path.exists():
+            extra['analysis_options'] = json.loads(options_path.read_text())
+            mask_depth = extra['analysis_options']['mask']['min_depth']
+            links['Analysis options'] = f'{prefix}/analysis_options.json'
         fasta = analysis / 'varcalling' / f'{sample}_consensus.fa'
         links.update({'Consensus FASTA': f'{prefix}/varcalling/{sample}_consensus.fa',
                       'Variants': f'{prefix}/varcalling/{sample}_norm.cons.vcf.gz',

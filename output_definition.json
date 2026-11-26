@@ -67,7 +67,7 @@
     "variants": {
       "filepath": "{{ alias }}/varcalling/{{ alias }}_norm.cons.vcf.gz",
       "title": "PASS variants VCF",
-      "description": "Consensus subset: QUAL >=20, FORMAT/DP >=30, FORMAT/AF >=0.5 and existing PASS by default; thresholds are configurable.",
+      "description": "Independently selected consensus VCF: DP >=30, QUAL >=20, AF >=0.5 plus caller PASS by default. Each threshold can be disabled with 0.",
       "mime-type": "application/gzip",
       "optional": true,
       "type": "per-sample"
@@ -91,7 +91,7 @@
     "variant-statistics": {
       "filepath": "{{ alias }}/varcalling/variants.stats",
       "title": "All normalized variant statistics",
-      "description": "bcftools statistics after normalized QUAL/DP selection, before consensus AF/PASS selection.",
+      "description": "Statistics on norm.vcf.gz after independent variant DP/QUAL selection; unaffected by consensus thresholds.",
       "mime-type": "text/plain",
       "optional": true,
       "type": "per-sample"
@@ -317,6 +317,14 @@
       "title": "Variant annotation Excel workbook",
       "description": "SNPs, Indels and Other variants worksheets preserving all TSV columns and records.",
       "mime-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "optional": true,
+      "type": "per-sample"
+    },
+    "analysis-options": {
+      "filepath": "{{ alias }}/analysis_options.json",
+      "title": "Resolved reference analysis options",
+      "description": "Independent variant/consensus thresholds, combined masking settings and executed filter expressions.",
+      "mime-type": "application/json",
       "optional": true,
       "type": "per-sample"
     }

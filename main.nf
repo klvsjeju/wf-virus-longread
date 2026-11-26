@@ -303,7 +303,7 @@ process WORKFLOW_REPORT {
  def summary_files = summaries instanceof List ? summaries : [summaries]
  def encoded = groovy.json.JsonOutput.toJson(settings).bytes.encodeBase64().toString()
  """
- python3 '${projectDir}/bin/report.py' aggregate '${encoded}' --versions-dir versions ${summary_files.collect { "'${it}'" }.join(' ')}
+ python3 '${projectDir}/bin/report.py' aggregate --versions-dir versions '${encoded}' ${summary_files.collect { "'${it}'" }.join(' ')}
  """
 }
 

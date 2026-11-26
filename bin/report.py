@@ -4,6 +4,7 @@ import argparse
 import base64
 import csv
 import json
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -216,7 +217,14 @@ def main():
     s.add_argument('--mask-depth', type=int, default=0)
     a = sub.add_parser('aggregate')
     a.add_argument('--versions-dir', type=Path); a.add_argument('settings'); a.add_argument('summaries', nargs='*', type=Path)
-    args = p.parse_args()
+    # argparse subparsers plus a trailing nargs='*' positional reject options
+    # between settings and summaries on Python 3.10. Parse the leaf parser
+    # directly to support both old cached commands and the canonical ordering.
+    if len(sys.argv) > 1 and sys.argv[1] == 'aggregate':
+        args = a.parse_intermixed_args(sys.argv[2:])
+        args.command = 'aggregate'
+    else:
+        args = p.parse_args()
     if args.command == 'sample':
         row = sample_summary(args.sample, args.mode, args.metadata, args.analysis, args.stats, args.flye, args.mask_depth, args.coverage)
         Path('summary.json').write_text(json.dumps(row, indent=2))

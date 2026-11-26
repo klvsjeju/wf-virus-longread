@@ -206,6 +206,7 @@ process ANNOTATION_WORKBOOK {
  script:
  """
  cp -aL --reflink=auto source_result result
+ python3 '${projectDir}/bin/annotation_gene_names.py' --vcf 'result/annot/${sample}_annot.vcf' --tsv result/annot/var.tsv
  python3 '${projectDir}/bin/annotation_workbook.py' result/annot/var.tsv result/annot/var.xlsx
  """
 }

@@ -212,3 +212,16 @@ Independent Advanced option groups and combined mask control (2026-11-26, versio
 - Advanced option titles carry analysis-mode prefixes. MAPQ is labelled for both modes because it also affects de novo contig coverage QC. User branding edits, CPU UI default and workflow version were preserved.
 - Local Python suite: 41 discovered, 39 passed, 2 renderer skips. Actual bcftools/samtools test exercises independent strict/permissive selections, 0/missing-value semantics, boundary AF/QUAL/DP, full reference.sh execution, 100-position mask creation and consensus output. Public report-container suite at 40 tests: 39 passed, 1 bcftools skip. Additional local schema/default assertion passed. Nextflow 23.04.2 annotated-reference preview, Bash syntax and git diff --check passed. Full biological workflow and EPI2ME form rendering were not rerun.
 - Old saved CLI/parameter controls min_variant_qual/min_variant_depth/min_variant_af/mask_depth/mask_depth_opts must be migrated to the new option strings; they are no longer used by workflow execution. README documents examples and migration.
+
+Separate per-mode MAPQ controls (2026-11-26, version retained at 0.3.3):
+- Replaced shared min_mapq with reference_min_mapq and denovo_min_mapq, both default 20 and non-negative integers. Advanced UI has separate mode-prefixed fields.
+- ALIGN_READS uses reference_min_mapq for reference BAMs; DE_NOVO_COVERAGE uses denovo_min_mapq for reporting alignments only. Flye read input is unaffected. Both configured values and effective selected-mode MAPQ are recorded in report settings.
+- Python suite: 41 discovered, 39 passed, 2 renderer tests skipped. Nextflow 23.04.2 de novo and reference previews passed with different MAPQs (10 de novo, 40 reference). Source wiring, schema parsing and git diff --check passed. Full biological analysis and EPI2ME form UI were not rerun. Saved parameter files using min_mapq need the corresponding new per-mode key.
+
+Restore shared MAPQ control (2026-11-26):
+- At the user's request, reverted the preceding per-mode MAPQ split. Both ALIGN_READS and DE_NOVO_COVERAGE again use min_mapq, default 20. Config/schema/report settings/README match their pre-split contents. Independent variant/consensus thresholds and combined mask options are unchanged.
+- Python suite: 41 discovered, 39 passed, 2 renderer skips. git diff --check passed.
+
+ORF annotation gene-name labels (2026-11-26, version retained at 0.3.3):
+- Added annotation_gene_names.py before Excel generation in ANNOTATION_WORKBOOK. Cleans exact ORF<number><optional-letter>_gene labels in ANN Gene_Name and extracted TSV gene-name cells. Published annotation VCF, TSV, workbook and report therefore agree; Gene_ID, effects, other fields, GFF and cached DB are unchanged. No database rebuild is required.
+- Targeted annotation tests: 3 passed. Checked multiple transcript annotations, ORF9A, non-ORF preservation, unchanged IDs/other fields, multiple TSV names and idempotence. git diff --check passed. Full biological workflow was not rerun for this label-only change.

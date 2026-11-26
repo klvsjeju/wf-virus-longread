@@ -13,25 +13,25 @@
           "title": "FASTQ file or folder",
           "description": "FASTQ files to use in the analysis.",
           "format": "path",
-          "help_text": "Choose one .fastq/.fq file (optionally gzip compressed), a folder of FASTQ files for one sample, or a folder of barcode/sample subfolders. Use sample_sheet to assign aliases to subfolders."
+          "help_text": "Choose one .fastq/.fq file (optionally gzip-compressed)."
         },
         "reference_based_assembly": {
           "type": "boolean",
           "title": "Reference-based assembly",
-          "description": "Enable reference based assembly istead of de novo assembly.",
+          "description": "Enable reference-based assembly instead of de novo assembly.",
           "default": false
         },
         "reference": {
           "type": "string",
           "title": "Reference FASTA",
-          "description": "reference sequence FASTA file.",
+          "description": "Reference sequence FASTA file.",
           "format": "file-path",
-          "help_text": "Upload/select your own uncompressed reference FASTA file. Used only when reference_based_assembly is enabled; no bundled reference is selected automatically."
+          "help_text": "Upload/select your own uncompressed reference FASTA file."
         },
         "analyse_unclassified": {
           "type": "boolean",
           "title": "Include unclassified folder",
-          "description": "Analyse unclassifed reads from input directory. By default the workflow will not process reads in the un classified directory.",
+          "description": "Analyse unclassified reads from the input directory. By default, the workflow does not process reads in the unclassified directory.",
           "default": false
         }
       }
@@ -43,25 +43,24 @@
         "sample_sheet": {
           "type": "string",
           "title": "Sample sheet CSV",
-          "description": "Optional barcode,alias CSV for multiplex input. Match either barcode-named or alias-named folders and use alias as the sample name.",
+          "description": "A CSV file used to map barcodes to sample aliases. The sample sheet can be provided when the input data is a directory containing subdirectories with FASTQ files.",
           "format": "file-path",
-          "help_text": "Folders absent from the sheet are ignored with a warning. Sheet entries without folders are recorded as missing input. Providing both barcode and alias folders for the same row is an error. Barcodes must use barcode plus at least two digits, all the same length. Barcodes and aliases must be unique. Alias must not begin with barcode. Optional type values are test_sample, positive_control, negative_control and no_template_control. Single-file and flat-folder inputs use the sample name or input-derived name."
+          "help_text": "The sample sheet is a CSV file with, at minimum, columns named barcode and alias. Extra columns are allowed."
         },
         "sample": {
           "type": "string",
           "title": "Sample name",
-          "description": "Optional name for one FASTQ file or a flat FASTQ folder. If empty, use the file stem or folder base name. For multiplex input, select a folder name or a sample sheet barcode/alias.",
-          "help_text": "Sample names use the wf-bacterial-genomes naming rules. Spaces in the final name become underscores. With a sample sheet, this field filters matching barcode or alias entries."
+          "description": "A single sample name for non-multiplexed data. Applicable when providing a single .fastq(.gz) file or a directory of .fastq(.gz) files."
         }
       }
     },
     "advanced": {
-      "title": "Advanced option",
+      "title": "Advanced options",
       "type": "object",
       "properties": {
         "override_basecaller_cfg": {
           "type": "string",
-          "title": "[reference-based] Manual basecalling model",
+          "title": "Manual basecalling model",
           "description": "Leave unset to infer from FASTQ headers. A manual selection overrides the inferred name.",
           "enum": [
             "dna_r10.4.1_e8.2_400bps_sup@v5.2.0",
@@ -95,18 +94,25 @@
             "dna_r9.4.1_450bps_hac",
             "dna_r9.4.1_e8.1_hac",
             "dna_r9.4.1_e8.1_hac_prom"
-          ],
-          "help_text": "Leave unset for automatic model detection with fastcat. A header fallback supports explicit model tags and versioned models in RG:Z: read-group tags. A manual selection overrides detection. Reference mode prepares a compatible Clair3 1.x checkpoint for supported models."
+          ]
+        },
+        "min_mapq": {
+          "type": "integer",
+          "title": "Minimum MAPQ",
+          "description": "Minimum mapping quality for reads. Default 20.",
+          "default": 20,
+          "minimum": 0,
+          "help_text": "Reference-based: filters alignments used for calling and depth. De novo: filters coverage-QC alignments only; does not filter Flye input."
         },
         "flye_genome_size": {
           "type": "integer",
           "title": "[de novo] Estimated genome size (bp)",
-          "description": "Estimated genome size for de novo assembly (e.g 5000000 for 5 Mb genome)"
+          "description": "Estimated genome size for de novo assembly (e.g., 5000000 for a 5 Mb genome)."
         },
         "min_read_length": {
           "type": "integer",
           "title": "[de novo] Minimum read length (bp)",
-          "description": "De novo assembly only: exclude reads shorter than this length before QC and Flye. Default 1000. Set to 0 to disable filtering.",
+          "description": "Exclude reads shorter than this length before QC and Flye. Default 1000.",
           "default": 1000,
           "minimum": 0
         },
@@ -117,41 +123,32 @@
           "default": "",
           "help_text": "Enter command-line arguments only. Quoted values are supported."
         },
-        "min_mapq": {
-          "type": "integer",
-          "title": "[reference-based] [de novo] Minimum MAPQ",
-          "description": "Minimum mapping quality for reads. Default 20.",
-          "default": 20,
-          "minimum": 0,
-          "help_text": "Reference-based: filters alignments used for calling and depth. De novo: filters coverage-QC alignments only; does not filter Flye input."
-        },
         "min_coverage": {
           "type": "integer",
-          "title": "[reference-based] Clair3 min coverage",
+          "title": "[reference-based] Minimum variant-calling coverage",
           "description": "Minimum coverage for variants to be called by Clair3. Default 30.",
           "default": 30,
           "minimum": 0
         },
-        "consensus_opts": {
-          "type": "string",
-          "title": "[reference-based] Additional consensus options",
-          "description": "Independent thresholds for norm.cons.vcf.gz: --min-dp 30 --min-qual 20 --min-af 0.5. Set a threshold to 0 to disable it; all three 0 apply no DP/QUAL/AF filtering.",
-          "default": "--min-dp 30 --min-qual 20 --min-af 0.5",
-          "help_text": "AF is a fraction: 0.5 = 50%, inclusive. Caller PASS status remains required even when thresholds are 0. Selects from normalized caller records independently of variant options. Extra bcftools consensus arguments are supported, e.g. --mask-with N."
-        },
-        "variant_opts": {
+         "variant_opts": {
           "type": "string",
           "title": "[reference-based] Additional variant options",
           "default": "--min-dp 30 --min-qual 20",
-          "description": "Independent thresholds for norm.vcf.gz: --min-dp 30 --min-qual 20. Set either to 0 to disable that threshold; both 0 retain all normalized calls, including missing values and non-PASS calls.",
-          "help_text": "Uses sample FORMAT/DP. QUAL is a non-negative number; DP is an integer. Report statistics and annotation use this VCF. Consensus filtering is independent."
+          "description": "Independent thresholds for the VCF file. Default: --min-dp 30 --min-qual 20."
+        },
+        "consensus_opts": {
+          "type": "string",
+          "title": "[reference-based] Additional consensus options",
+          "description": "Independent thresholds applied only to the VCF file used to generate the consensus. Default: --min-dp 30 --min-qual 20 --min-af 0.5.",
+          "default": "--min-dp 30 --min-qual 20 --min-af 0.5",
+          "help_text": "AF is a fraction: 0.5 = 50%, inclusive."
         },
         "mask_opts": {
           "type": "string",
           "title": "[reference-based] Consensus masking options",
           "default": "--min-depth 0",
-          "description": "Combined N-mask threshold and samtools depth arguments. Example: --min-depth 10 -q 15 -Q 20. Default --min-depth 0 disables N-masking.",
-          "help_text": "--min-depth is a workflow option; positions below this depth are masked. Remaining arguments go to samtools depth for reference coverage/masking. -q is minimum base quality; -Q is minimum MAPQ. -aa -J remain enabled."
+          "description": "Masking threshold for the consensus. Example: --min-depth 10 -q 15 -Q 20. Default: --min-depth 0.",
+          "help_text": "--min-depth sets the depth below which positions are masked. -q is the minimum base quality; -Q is the minimum MAPQ."
         }
       }
     },
@@ -170,19 +167,19 @@
           "title": "Reference annotation GFF3",
           "description": "Select an uncompressed GFF3 annotation for the same reference FASTA used in this analysis.",
           "format": "file-path",
-          "help_text": "FASTA is reused automatically. Sequence IDs must match exactly, including accession versions. Coordinates, CDS phase and Parent links are checked. Required to build a new database; omit only when a unique matching verified database exists in the cache."
+          "help_text": "FASTA is reused automatically. Sequence IDs must match exactly, including accession versions."
         },
-        "snpeff_cache": {
+        "snpeff_databased_folder": {
           "type": "string",
           "title": "Annotation database folder",
           "description": "Optional writable folder for verified snpEff databases. Defaults to annotation_database inside the output folder.",
           "format": "directory-path",
-          "help_text": "Select a folder previously created by this workflow to reuse databases. Raw legacy databases are not guessed from filenames. Multiple matching annotation versions require selecting the intended GFF3. Database configuration and ID are generated automatically."
+          "help_text": "Select a folder previously created by this workflow to reuse databases. Database configuration and ID are generated automatically."
         }
       }
     },
     "misc": {
-      "title": "Miscellaneous option",
+      "title": "Miscellaneous options",
       "type": "object",
       "properties": {
         "threads": {
@@ -238,5 +235,5 @@
   "required": [
     "fastq"
   ],
-  "description": " Human herpes virus: reference based analysis or de novo Flye contigs."
+  "description": "Human herpesvirus: reference-based analysis or de novo Flye contigs."
 }

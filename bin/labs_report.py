@@ -73,6 +73,10 @@ def per_sample(samples, draw):
                 draw(sample)
 
 
+# Low-to-high substitution percentages: ivory, dusty rose, brick, burgundy.
+SUBSTITUTION_PALETTE = ['#F7EFE8', '#E9CFC7', '#D5A39A', '#B8746B', '#914C49', '#653536']
+
+
 def variant_plots(sample):
     stats = sample.get('variants')
     if not stats:
@@ -90,7 +94,7 @@ def variant_plots(sample):
     with Grid(columns=2):
         total = counts.to_numpy().sum()
         if total:
-            plot = ezc.heatmap((counts * 100 / total).round(1).T, vmin=0)
+            plot = ezc.heatmap((counts * 100 / total).round(1).T, vmin=0, cmap=SUBSTITUTION_PALETTE)
             plot.title = dict(text='Substitution types (%)')
             plot.series[0].label.formatter = '{@[2]} %'
             EZChart(plot, 'epi2melabs')

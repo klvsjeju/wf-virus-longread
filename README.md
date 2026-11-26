@@ -116,7 +116,7 @@ Bcftools normalizes the merged calls, then selects the two VCFs independently. `
 
 ### 3. Optional variant annotation
 
-When `run_annotation` is enabled, snpEff annotates the **QUAL/DP-filtered normalized VCF**, including qualifying non-PASS records. SnpSift extracts a TSV with positions, alleles, genes, effects, impacts, genotype, depth, allele fraction and HGVS fields. The workflow also writes `annot/var.xlsx` with SNPs, Indels and Other variants worksheets, preserving every TSV column and record. Simple single-base substitutions go to SNPs; sequence alleles of unequal length go to Indels; equal-length multi-base substitutions, symbolic alleles and other records go to Other variants. The original `var.tsv` is retained.
+When `run_annotation` is enabled, snpEff annotates the **QUAL/DP-filtered normalized VCF**, including qualifying non-PASS records. SnpSift extracts a TSV with positions, alleles, genes, effects, impacts, genotype, depth, allele fraction and HGVS fields. The workflow also writes `annot/var.xlsx` with SNPs, Indels and Other variants worksheets, preserving every TSV column and record. Simple single-base substitutions go to SNPs; sequence alleles of unequal length go to Indels; equal-length multi-base substitutions, symbolic alleles and other records go to Other variants. The original `var.tsv` is retained. ORF gene-name labels are displayed without the descriptive `_gene` suffix (e.g., `ORF3_gene` becomes `ORF3`) consistently in the published annotation VCF, TSV, workbook and report; gene IDs, source GFF and cached databases are unchanged.
 
 The alignment reference FASTA is reused automatically. In EPI2ME, choose:
 

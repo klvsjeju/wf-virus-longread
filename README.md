@@ -112,7 +112,7 @@ For report QC, the retained reads are mapped back to those contigs. Primary mapp
 
 The selected reference is indexed, reads are aligned using `mini_align`, and samtools removes unmapped, secondary, supplementary and low-MAPQ alignments. Clair3 performs ONT haploid-sensitive variant calling using the selected checkpoint.
 
-Bcftools normalizes the merged calls, then selects the two VCFs independently. `variant_opts` controls `<sample>_norm.vcf.gz` (default DP >=30, QUAL >=20); report statistics and annotation use this VCF, including qualifying non-PASS records. `consensus_opts` controls `<sample>_norm.cons.vcf.gz` (default DP >=30, QUAL >=20, AF >=0.5, plus caller PASS). A threshold set to 0 disables that comparison, including its missing-value requirement. Setting both variant thresholds to 0 retains all normalized records; setting all three consensus thresholds to 0 retains all caller-PASS records without DP/QUAL/AF selection. Consensus does not inherit the variant VCF thresholds. Clair3 `min_coverage` remains a separate upstream caller setting; disabling downstream filters cannot restore calls absent from Clair3 output.
+Bcftools normalizes the merged calls, then selects the two VCFs independently. `variant_opts` controls `<sample>_norm.vcf.gz` (default DP >=30, QUAL >=10); report statistics and annotation use this VCF, including qualifying non-PASS records. `consensus_opts` controls `<sample>_norm.cons.vcf.gz` (default DP >=30, QUAL >=10, AF >=0.5, plus caller PASS). A threshold set to 0 disables that comparison, including its missing-value requirement. Setting both variant thresholds to 0 retains all normalized records; setting all three consensus thresholds to 0 retains all caller-PASS records without DP/QUAL/AF selection. Consensus does not inherit the variant VCF thresholds. Clair3 `min_coverage` remains a separate upstream caller setting; disabling downstream filters cannot restore calls absent from Clair3 output.
 
 ### 3. Optional variant annotation
 
@@ -159,8 +159,8 @@ EPI2ME groups the launch settings into Input options, Sample options, Advanced o
 | `override_basecaller_cfg` | Unset | Manually identify the model used to basecall the existing reads. |
 | `min_mapq` | `20` | Minimum MAPQ for retained reference alignments and de novo coverage QC. |
 | `min_coverage` | `30` | Clair3 minimum coverage. |
-| `variant_opts` | `--min-dp 30 --min-qual 20` | Independent norm.vcf.gz thresholds; 0 disables each. |
-| `consensus_opts` | `--min-dp 30 --min-qual 20 --min-af 0.5` | Independent norm.cons.vcf.gz thresholds plus optional bcftools consensus arguments. |
+| `variant_opts` | `--min-dp 30 --min-qual 10` | Independent norm.vcf.gz thresholds; 0 disables each. |
+| `consensus_opts` | `--min-dp 30 --min-qual 10 --min-af 0.5` | Independent norm.cons.vcf.gz thresholds plus optional bcftools consensus arguments. |
 | `mask_opts` | `--min-depth 0` | Combined mask depth threshold and samtools depth arguments. |
 | `run_annotation` | `false` | Enable snpEff and SnpSift in reference mode. |
 | `annotation_gff` | Unset | Matching GFF3 for automatic DB construction. |
@@ -175,13 +175,13 @@ Advanced fields identify applicable modes with `[de novo]` or `[reference-based]
 | Setting | Example | Effect |
 | --- | --- | --- |
 | `flye_opts` | `--meta --iterations 2 --asm-coverage 50` | Additional de novo Flye arguments. |
-| `variant_opts` | `--min-dp 30 --min-qual 20` | Thresholds for norm.vcf.gz only. |
-| `consensus_opts` | `--min-dp 30 --min-qual 20 --min-af 0.5` | Thresholds for norm.cons.vcf.gz only. |
+| `variant_opts` | `--min-dp 30 --min-qual 10` | Thresholds for norm.vcf.gz only. |
+| `consensus_opts` | `--min-dp 30 --min-qual 10 --min-af 0.5` | Thresholds for norm.cons.vcf.gz only. |
 | `mask_opts` | `--min-depth 30 -q 15 -Q 20` | Mask positions below 30x after base/MAPQ selection. |
 
 Use `--min-dp 0 --min-qual 0` to disable both variant thresholds. Use `--min-dp 0 --min-qual 0 --min-af 0` to disable all three consensus thresholds; caller PASS status is still required. AF uses fractions, so 0.5 means 50% inclusive. Empty fields use workflow defaults. Omitting a flag keeps its default; explicitly set it to 0 to disable it.
 
-Additional bcftools consensus arguments can follow the workflow flags, for example `--min-dp 30 --min-qual 20 --min-af 0.5 --mask-with N`. Extra include/exclude expressions further restrict sequence generation and do not alter either published VCF.
+Additional bcftools consensus arguments can follow the workflow flags, for example `--min-dp 30 --min-qual 10 --min-af 0.5 --mask-with N`. Extra include/exclude expressions further restrict sequence generation and do not alter either published VCF.
 
 The previous standalone `min_variant_qual`, `min_variant_depth`, `min_variant_af`, `mask_depth` and `mask_depth_opts` controls are replaced by these option strings. Update saved parameter files accordingly. `mask_opts` combines the old masking controls: `--min-depth` is interpreted by the workflow, while remaining options go to samtools depth. `-q` is base quality and `-Q` is MAPQ; defaults retain `-aa -J`. Region restrictions leave positions outside the selected region untreated by the mask. Depth options cannot restore reads removed during alignment.
 
@@ -217,7 +217,7 @@ Only folders relevant to the selected mode are created. If `out_dir` is unset, t
 | --- | --- |
 | `<sample>_merge_output.vcf.gz` | Merged Clair3 calls retained for provenance. |
 | `<sample>_norm.vcf.gz` | QUAL/DP-filtered normalized calls, including qualifying non-PASS records; used for report statistics and annotation. |
-| `<sample>_norm.cons.vcf.gz` | Independent consensus selection with DP >=30, QUAL >=20, AF >=0.5 and caller PASS by default. |
+| `<sample>_norm.cons.vcf.gz` | Independent consensus selection with DP >=30, QUAL >=10, AF >=0.5 and caller PASS by default. |
 | `<sample>_annot.vcf` | Optional snpEff-annotated normalized calls, stored in `annot/`. |
 | `<sample>_consensus.fa` | Reference-guided consensus. |
 

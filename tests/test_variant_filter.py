@@ -25,7 +25,7 @@ class AnalysisOptionsTests(unittest.TestCase):
             self.assertTrue(fields[key]['title'].startswith('[de novo]'))
         for kind,key in [('variant','variant_opts'),('consensus','consensus_opts'),('mask','mask_opts')]:
             resolved=resolve(kind,fields[key]['default'])
-            expected={'variant':{'min_dp':30,'min_qual':20},'consensus':{'min_dp':30,'min_qual':20,'min_af':0.5},'mask':{'min_depth':0}}[kind]
+            expected={'variant':{'min_dp':30,'min_qual':10},'consensus':{'min_dp':30,'min_qual':10,'min_af':0.5},'mask':{'min_depth':0}}[kind]
             for name,value in expected.items():self.assertEqual(resolved[name],value)
 
     def test_defaults_zero_and_validation(self):
@@ -53,8 +53,8 @@ class VariantFilterTests(unittest.TestCase):
                     '##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Depth">\n'
                     '##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fraction">\n'
                     '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\ts\n')
-            cases=[(20,30,0.5,'PASS'),(19.99,30,0.9,'PASS'),(20,29,0.9,'PASS'),
-                   (21,31,0.8,'PASS'),('.',30,0.9,'PASS'),(20,'.',0.9,'PASS'),
+            cases=[(10,30,0.5,'PASS'),(9.99,30,0.9,'PASS'),(10,29,0.9,'PASS'),
+                   (11,31,0.8,'PASS'),('.',30,0.9,'PASS'),(10,'.',0.9,'PASS'),
                    (30,40,0.9,'LowQual'),(30,40,0.4999,'PASS'),(30,40,'.','PASS')]
             text=header+''.join(f'ref\t{i}\t.\tA\tC\t{q}\t{f}\t.\tGT:DP:AF\t1:{d}:{af}\n' for i,(q,d,af,f) in enumerate(cases,1))
             source=folder/'s_merge_output.vcf.gz'
@@ -84,7 +84,7 @@ class VariantFilterTests(unittest.TestCase):
             helper=Path(__file__).resolve().parents[1]/'bin/run_options.py'
             enc=lambda text:base64.b64encode(text.encode()).decode()
             env.update(OPTIONS_RUNNER=str(helper),VARIANT_OPTS_B64=enc('--min-dp 0 --min-qual 0'),
-                       CONSENSUS_OPTS_B64=enc('--min-dp 30 --min-qual 20 --min-af 0.5'),MASK_OPTS_B64=enc('--min-depth 2'))
+                       CONSENSUS_OPTS_B64=enc('--min-dp 30 --min-qual 10 --min-af 0.5'),MASK_OPTS_B64=enc('--min-depth 2'))
             subprocess.run(['bash',str(helper.with_name('reference.sh'))],cwd=root,env=env,check=True,capture_output=True)
             self.assertTrue((folder/'s_consensus.fa').exists())
             self.assertEqual(len((folder/'low_coverage.bed').read_text().splitlines()),100)

@@ -67,7 +67,7 @@
     "variants": {
       "filepath": "{{ alias }}/varcalling/{{ alias }}_norm.cons.vcf.gz",
       "title": "PASS variants VCF",
-      "description": "Independently selected consensus VCF: DP >=30, QUAL >=20, AF >=0.5 plus caller PASS by default. Each threshold can be disabled with 0.",
+      "description": "Independently selected consensus VCF: DP >=30, QUAL >=10, AF >=0.5 plus caller PASS by default. Each threshold can be disabled with 0.",
       "mime-type": "application/gzip",
       "optional": true,
       "type": "per-sample"
@@ -75,7 +75,7 @@
     "normalized-variants": {
       "filepath": "{{ alias }}/varcalling/{{ alias }}_norm.vcf.gz",
       "title": "QUAL/DP-filtered normalized variants VCF",
-      "description": "QUAL >=20 and sample FORMAT/DP >=30 by default, including qualifying non-PASS records; no AF filter. Used for statistics and annotation.",
+      "description": "QUAL >=10 and sample FORMAT/DP >=30 by default, including qualifying non-PASS records; no AF filter. Used for statistics and annotation.",
       "mime-type": "application/gzip",
       "optional": true,
       "type": "per-sample"

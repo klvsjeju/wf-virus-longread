@@ -34,7 +34,7 @@ def resolve(kind, text):
         parser.add_argument('--min-depth', type=integer, default=0)
     else:
         parser.add_argument('--min-dp', type=integer, default=30)
-        parser.add_argument('--min-qual', type=number, default=20)
+        parser.add_argument('--min-qual', type=number, default=10)
         if kind == 'consensus':
             parser.add_argument('--min-af', type=number, default=0.5)
     args, extra = parser.parse_known_args(shlex.split(text))

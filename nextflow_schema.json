@@ -133,14 +133,14 @@
          "variant_opts": {
           "type": "string",
           "title": "[reference-based] Additional variant options",
-          "default": "--min-dp 30 --min-qual 20",
-          "description": "Independent thresholds for the VCF file. Default: --min-dp 30 --min-qual 20."
+          "default": "--min-dp 30 --min-qual 10",
+          "description": "Independent thresholds for the VCF file. Default: --min-dp 30 --min-qual 10."
         },
         "consensus_opts": {
           "type": "string",
           "title": "[reference-based] Additional consensus options",
-          "description": "Independent thresholds applied only to the VCF file used to generate the consensus. Default: --min-dp 30 --min-qual 20 --min-af 0.5.",
-          "default": "--min-dp 30 --min-qual 20 --min-af 0.5",
+          "description": "Independent thresholds applied only to the VCF file used to generate the consensus. Default: --min-dp 30 --min-qual 10 --min-af 0.5.",
+          "default": "--min-dp 30 --min-qual 10 --min-af 0.5",
           "help_text": "AF is a fraction: 0.5 = 50%, inclusive."
         },
         "mask_opts": {

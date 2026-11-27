@@ -86,6 +86,27 @@ class MetricsTests(unittest.TestCase):
             self.assertEqual(data['preview'][-1]['POS'], '601')
 
     @unittest.skipUnless(importlib.util.find_spec('ezcharts'), 'Requires the wf-common container')
+    def test_base_yield_line_uses_report_red_after_rendering(self):
+        import labs_report
+        import pandas as pd
+        from bokeh.models import Line
+        from dominate import document
+        from unittest.mock import patch
+        rendered=[]
+        original=labs_report.EZChart
+        def capture(plot,*args,**kwargs):
+            result=original(plot,*args,**kwargs)
+            rendered.append(plot)
+            return result
+        lengths=pd.DataFrame({'start':[100,200],'end':[101,201],'count':[2,1]})
+        qualities=pd.DataFrame({'start':[10,20],'end':[10.1,20.1],'count':[2,1]})
+        with document(),patch.object(labs_report,'EZChart',side_effect=capture):
+            labs_report.HistogramSummary._draw_summary_plots(None,lengths,qualities,300)
+        glyphs=list(rendered[2]._fig.select({'type':Line}))
+        self.assertTrue(glyphs)
+        self.assertTrue(all(glyph.line_color==labs_report.CHART_PRIMARY for glyph in glyphs))
+
+    @unittest.skipUnless(importlib.util.find_spec('ezcharts'), 'Requires the wf-common container')
     def test_labs_reference_render_and_all_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

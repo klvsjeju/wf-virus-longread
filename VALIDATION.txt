@@ -230,3 +230,7 @@ B00020 report chart palette (2026-11-26, version retained at 0.3.3):
 - Updated substitution heatmap to a sequential pale-rose/red/burgundy palette anchored at #B00020. Integrated read-quality/read-length histograms, base-yield line and indel histogram use #B00020.
 - Coverage palette maps total=#B00020, fwd=#D86A7D and rev=#680015, retaining distinct shades across strands. Header/user branding, chart data and analysis settings are unchanged. Separate NanoPlot HTML styling is outside this integrated-report change.
 - Actual public wf-common report-container tests: 7 report metrics/rendering tests and 2 report tests passed with EZCHARTS_DEBUG=1. git diff --check passed. No biological analysis rerun was required.
+
+Base-yield line color correction (2026-11-27, version retained at 0.3.3):
+- Reproduced ezcharts lineplot with palette=[#B00020] and no hue still creating a blue (#0173b2) Bokeh Line glyph. Set all base-yield Line glyph states to CHART_PRIMARY explicitly after plot creation.
+- Added regression checking actual glyph colors after EZChart rendering. Actual public wf-common container: 8 report metrics/rendering tests passed with EZCHARTS_DEBUG=1. git diff --check passed. Other plot palettes and report data are unchanged.

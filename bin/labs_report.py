@@ -22,7 +22,7 @@ from ezcharts.layout.snippets import Grid, Tabs
 from ezcharts.layout.snippets.table import DataTable
 import pandas as pd
 from report_branding import apply_branding
-from bokeh.models import Title
+from bokeh.models import Line, Title
 
 
 # Shared red theme for integrated report charts.
@@ -49,6 +49,10 @@ class HistogramSummary(fastcat.SeqSummary):
             n50 = data.loc[above >= above.iloc[0] / 2, 'start'].iloc[-1]
             frame = pd.DataFrame({'Length': data['start'] / 1000, 'Yield': above / 1e9})
             plot = ezc.lineplot(data=frame, x='Length', y='Yield', marker=False, palette=[CHART_PRIMARY])
+            # This ezcharts version ignores palette without hue; set all line
+            # glyph states explicitly so the rendered chart cannot stay blue.
+            for glyph in plot._fig.select({'type': Line}):
+                glyph.line_color = CHART_PRIMARY
             plot._fig.xaxis.axis_label = 'Read length / kb'
             plot._fig.yaxis.axis_label = 'Yield above length / Gbases'
             plot._fig.add_layout(Title(text='Base yield above read length', text_font_size='1.5em'), 'above')

@@ -225,3 +225,8 @@ Restore shared MAPQ control (2026-11-26):
 ORF annotation gene-name labels (2026-11-26, version retained at 0.3.3):
 - Added annotation_gene_names.py before Excel generation in ANNOTATION_WORKBOOK. Cleans exact ORF<number><optional-letter>_gene labels in ANN Gene_Name and extracted TSV gene-name cells. Published annotation VCF, TSV, workbook and report therefore agree; Gene_ID, effects, other fields, GFF and cached DB are unchanged. No database rebuild is required.
 - Targeted annotation tests: 3 passed. Checked multiple transcript annotations, ORF9A, non-ORF preservation, unchanged IDs/other fields, multiple TSV names and idempotence. git diff --check passed. Full biological workflow was not rerun for this label-only change.
+
+B00020 report chart palette (2026-11-26, version retained at 0.3.3):
+- Updated substitution heatmap to a sequential pale-rose/red/burgundy palette anchored at #B00020. Integrated read-quality/read-length histograms, base-yield line and indel histogram use #B00020.
+- Coverage palette maps total=#B00020, fwd=#D86A7D and rev=#680015, retaining distinct shades across strands. Header/user branding, chart data and analysis settings are unchanged. Separate NanoPlot HTML styling is outside this integrated-report change.
+- Actual public wf-common report-container tests: 7 report metrics/rendering tests and 2 report tests passed with EZCHARTS_DEBUG=1. git diff --check passed. No biological analysis rerun was required.

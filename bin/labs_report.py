@@ -25,15 +25,21 @@ from report_branding import apply_branding
 from bokeh.models import Title
 
 
+# Shared red theme for integrated report charts.
+CHART_PRIMARY = '#B00020'
+COVERAGE_PALETTE = {'total': CHART_PRIMARY, 'fwd': '#D86A7D', 'rev': '#680015'}
+SUBSTITUTION_PALETTE = ['#FFF5F6', '#F4CCD3', '#E79AAA', '#D5647B', CHART_PRIMARY, '#720015']
+
+
 class HistogramSummary(fastcat.SeqSummary):
     """Retain upstream QC plots, fixing histogram yield N50 for small samples."""
 
     def _draw_summary_plots(self, ldata, qdata, height):
         with Grid(columns=3):
             EZChart(fastcat.read_quality_plot(qdata, min_qual=min(4, math.floor(qdata['start'].min())),
-                                              max_qual=max(30, math.ceil(qdata['end'].max()))),
+                                              max_qual=max(30, math.ceil(qdata['end'].max())), color=CHART_PRIMARY),
                     'epi2melabs', height=height)
-            EZChart(fastcat.read_length_plot(ldata), 'epi2melabs', height=height)
+            EZChart(fastcat.read_length_plot(ldata, color=CHART_PRIMARY), 'epi2melabs', height=height)
             # Upstream base_yield_plot indexes past the final histogram bin when
             # the longest bin contributes >= half of the yield. Calculate the
             # weighted N50 directly rather than expanding histogram counts.
@@ -42,7 +48,7 @@ class HistogramSummary(fastcat.SeqSummary):
             above = yields.iloc[::-1].cumsum().iloc[::-1]
             n50 = data.loc[above >= above.iloc[0] / 2, 'start'].iloc[-1]
             frame = pd.DataFrame({'Length': data['start'] / 1000, 'Yield': above / 1e9})
-            plot = ezc.lineplot(data=frame, x='Length', y='Yield', marker=False)
+            plot = ezc.lineplot(data=frame, x='Length', y='Yield', marker=False, palette=[CHART_PRIMARY])
             plot._fig.xaxis.axis_label = 'Read length / kb'
             plot._fig.yaxis.axis_label = 'Yield above length / Gbases'
             plot._fig.add_layout(Title(text='Base yield above read length', text_font_size='1.5em'), 'above')
@@ -73,10 +79,6 @@ def per_sample(samples, draw):
                 draw(sample)
 
 
-# Low-to-high substitution percentages: ivory, dusty rose, brick, burgundy.
-SUBSTITUTION_PALETTE = ['#F7EFE8', '#E9CFC7', '#D5A39A', '#B8746B', '#914C49', '#653536']
-
-
 def variant_plots(sample):
     stats = sample.get('variants')
     if not stats:
@@ -102,7 +104,7 @@ def variant_plots(sample):
             html.p('No substitutions were found for this sample.')
         if stats['indels']:
             frame = pd.DataFrame(stats['indels'])
-            plot = ezc.histplot(data=frame['length'], x='length', discrete=True, weights=frame['count'], title='Insertion and deletion lengths')
+            plot = ezc.histplot(data=frame['length'], x='length', discrete=True, weights=frame['count'], title='Insertion and deletion lengths', color=CHART_PRIMARY)
             plot._fig.xaxis.axis_label = 'Indel length / bases (deletions negative)'
             plot._fig.yaxis.axis_label = 'Number of sites'
             EZChart(plot, 'epi2melabs')
@@ -125,7 +127,7 @@ def coverage_plots(sample):
             data = [{'position': p['position'], 'depth': p[key], 'strand': label}
                     for p in row['plot'] for key, label in [('depth','total'),('fwd','fwd'),('rev','rev')] if key in p]
             plot = ezc.lineplot(data=pd.DataFrame(data), x='position', y='depth', hue='strand',
-                                title=row['reference'], marker=False)
+                                title=row['reference'], marker=False, palette=COVERAGE_PALETTE)
             plot._fig.xaxis.axis_label = 'Position along reference / bp'
             plot._fig.yaxis.axis_label = 'Mean sequencing depth'
             EZChart(plot, 'epi2melabs')
